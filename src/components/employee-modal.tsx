@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Modal } from "./modal";
 import { useToast } from "./toast";
 import { DataService, Employee } from "@/services/dataService";
+import { SearchableSelect, SelectOption } from "./searchable-select";
 
 interface EmployeeModalProps {
   isOpen: boolean;
@@ -11,6 +12,23 @@ interface EmployeeModalProps {
   employeeToEdit?: Employee | null;
   onSaved?: (employee: Employee) => void;
 }
+
+const DEPARTMENT_OPTIONS: SelectOption[] = [
+  { value: "Content", label: "Content", subLabel: "Copywriting, design & media production" },
+  { value: "Client Success", label: "Client Success", subLabel: "Account managers & client strategists" },
+  { value: "Insights", label: "Insights", subLabel: "Analytics, reporting & audience research" },
+  { value: "Engagement", label: "Engagement", subLabel: "Social community & creator networking" },
+  { value: "Engineering", label: "Engineering", subLabel: "Platform, API & database operations" },
+  { value: "Executive", label: "Executive", subLabel: "Agency leadership & directors" },
+  { value: "Design", label: "Design", subLabel: "Brand identities & UI/UX" },
+  { value: "Marketing", label: "Marketing", subLabel: "Paid performance & organic distribution" },
+];
+
+const STATUS_OPTIONS: SelectOption[] = [
+  { value: "Active", label: "Active", subLabel: "Active team member" },
+  { value: "Away", label: "Away", subLabel: "Temporarily unavailable" },
+  { value: "On Leave", label: "On Leave", subLabel: "Official leave of absence" },
+];
 
 export function EmployeeModal({
   isOpen,
@@ -29,17 +47,6 @@ export function EmployeeModal({
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const DEPARTMENTS = [
-    "Content",
-    "Client Success",
-    "Insights",
-    "Engagement",
-    "Engineering",
-    "Executive",
-    "Design",
-    "Marketing",
-  ];
 
   useEffect(() => {
     if (isOpen) {
@@ -127,7 +134,7 @@ export function EmployeeModal({
           toast.success(
             password.trim()
               ? `User "${updated.name}" details and password updated successfully!`
-              : `User "${updated.name}" updated successfully.`
+              : `User "${updated.name}" updated successfully in Supabase.`
           );
           onSaved?.(updated);
         }
@@ -141,12 +148,12 @@ export function EmployeeModal({
           status,
           password: password.trim(),
         });
-        toast.success(`User "${created.name}" created with assigned password!`);
+        toast.success(`User "${created.name}" created with assigned credentials in Supabase!`);
         onSaved?.(created);
       }
       onClose();
     } catch (err: any) {
-      toast.error(err?.message || "Failed to save employee to Supabase.");
+      toast.error(err?.message || "Failed to save user to Supabase.");
     } finally {
       setLoading(false);
     }
@@ -159,14 +166,34 @@ export function EmployeeModal({
       title={employeeToEdit ? "Edit Team Member" : "Add Team Member / User"}
       subtitle={
         employeeToEdit
-          ? "Update user profile details, permissions, or reset login password."
-          : "Register a new user and assign their login credentials."
+          ? "Update user profile details, roles, permissions, or reset login password."
+          : "Register a new user and assign their login credentials for workspace access."
       }
-      maxWidth="lg"
+      maxWidth="3xl"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="employee-modal-form"
+            disabled={loading}
+            className="rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2 shadow-sm"
+          >
+            {loading ? "Saving..." : employeeToEdit ? "Save Changes" : "Create User with Access"}
+          </button>
+        </>
+      }
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form id="employee-modal-form" onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
             Full Name <span className="text-rose-500">*</span>
           </label>
           <input
@@ -174,87 +201,69 @@ export function EmployeeModal({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Jordan Chen"
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
           />
           {errors.name && <p className="mt-1 text-xs text-rose-500">{errors.name}</p>}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Email <span className="text-rose-500">*</span>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+              Work Email <span className="text-rose-500">*</span>
             </label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. jchen@insightone.com"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+              placeholder="e.g. jchen@insightone.ai"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
             />
             {errors.email && <p className="mt-1 text-xs text-rose-500">{errors.email}</p>}
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Phone
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+              Phone Number
             </label>
             <input
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="+1 (555) 123-4567"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
             />
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
               Role / Title <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              placeholder="e.g. Account Strategist"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+              placeholder="e.g. Account Strategist / Admin"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
             />
             {errors.role && <p className="mt-1 text-xs text-rose-500">{errors.role}</p>}
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Department
-            </label>
-            <select
-              value={department}
-              onChange={(e) => setDepartment(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              {DEPARTMENTS.map((dept) => (
-                <option key={dept} value={dept}>
-                  {dept}
-                </option>
-              ))}
-            </select>
-          </div>
+          <SearchableSelect
+            label="Department"
+            options={DEPARTMENT_OPTIONS}
+            value={department}
+            onChange={(val) => setDepartment(val)}
+          />
         </div>
 
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-            Status
-          </label>
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value as any)}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-          >
-            <option value="Active">Active</option>
-            <option value="Away">Away</option>
-            <option value="On Leave">On Leave</option>
-          </select>
-        </div>
+        <SearchableSelect
+          label="Account Status"
+          options={STATUS_OPTIONS}
+          value={status}
+          onChange={(val) => setStatus(val)}
+        />
 
         {/* Admin Password Assignment Card */}
         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 space-y-2.5">
@@ -310,27 +319,9 @@ export function EmployeeModal({
           <p className="text-xs text-slate-500 leading-relaxed">
             {employeeToEdit
               ? "Leave blank to keep the member's current credentials, or type a new password to reset their access."
-              : "The new user will use their email and this password to log in to Insight One."}
+              : "The new user will use their work email and this password to log in to Insight One."}
           </p>
           {errors.password && <p className="text-xs text-rose-500">{errors.password}</p>}
-        </div>
-
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={loading}
-            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2 shadow-sm"
-          >
-            {loading ? "Saving..." : employeeToEdit ? "Save Changes" : "Create User with Access"}
-          </button>
         </div>
       </form>
     </Modal>

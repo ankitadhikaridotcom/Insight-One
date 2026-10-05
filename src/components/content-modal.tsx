@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Modal } from "./modal";
 import { useToast } from "./toast";
 import { DataService, ContentItem, ContentStage, CONTENT_STAGES, Client, Employee } from "@/services/dataService";
+import { SearchableSelect, SelectOption } from "./searchable-select";
 
 interface ContentModalProps {
   isOpen: boolean;
@@ -12,6 +13,39 @@ interface ContentModalProps {
   onSaved?: (item: ContentItem) => void;
   defaultStage?: ContentStage;
 }
+
+const CONTENT_TYPES: SelectOption[] = [
+  { value: "Article / Blog Post", label: "Article / Blog Post", subLabel: "Long-form editorial" },
+  { value: "Short Video / Reel", label: "Short Video / Reel", subLabel: "TikTok, Reels & Shorts" },
+  { value: "Newsletter Issue", label: "Newsletter Issue", subLabel: "Direct email subscriber broadcast" },
+  { value: "Whitepaper / Guide", label: "Whitepaper / Guide", subLabel: "In-depth industry report" },
+  { value: "Social Media Carousel", label: "Social Media Carousel", subLabel: "Multi-slide visual deck" },
+  { value: "Infographic", label: "Infographic", subLabel: "Data visualization graphic" },
+  { value: "Case Study", label: "Case Study", subLabel: "Client proof of work" },
+  { value: "Podcast / Audio", label: "Podcast / Audio", subLabel: "Audio interview or episode" },
+];
+
+const PLATFORMS: SelectOption[] = [
+  { value: "LinkedIn", label: "LinkedIn", subLabel: "B2B professional audience" },
+  { value: "Twitter / X", label: "Twitter / X", subLabel: "Real-time updates & threads" },
+  { value: "Instagram", label: "Instagram", subLabel: "Visual lifestyle & reels" },
+  { value: "YouTube", label: "YouTube", subLabel: "Long-form video library" },
+  { value: "Newsletter", label: "Newsletter", subLabel: "Substack / Beehiiv" },
+  { value: "Blog", label: "Corporate Blog", subLabel: "Organic search & SEO" },
+  { value: "TikTok", label: "TikTok", subLabel: "Viral short-form content" },
+];
+
+const PRIORITY_OPTIONS: SelectOption[] = [
+  { value: "Low", label: "Low Priority", subLabel: "Flexible publish date" },
+  { value: "Medium", label: "Medium Priority", subLabel: "Standard pipeline item" },
+  { value: "High", label: "High Priority", subLabel: "Urgent campaign launch" },
+];
+
+const STAGE_OPTIONS: SelectOption[] = CONTENT_STAGES.map((st) => ({
+  value: st,
+  label: st,
+  subLabel: `Pipeline stage: ${st}`,
+}));
 
 export function ContentModal({
   isOpen,
@@ -35,27 +69,6 @@ export function ContentModal({
 
   const [clientOptions, setClientOptions] = useState<Client[]>([]);
   const [employeeOptions, setEmployeeOptions] = useState<Employee[]>([]);
-
-  const CONTENT_TYPES = [
-    "Article / Blog Post",
-    "Short Video / Reel",
-    "Newsletter Issue",
-    "Whitepaper / Guide",
-    "Social Media Carousel",
-    "Infographic",
-    "Case Study",
-    "Podcast / Audio",
-  ];
-
-  const PLATFORMS = [
-    "LinkedIn",
-    "Twitter / X",
-    "Instagram",
-    "YouTube",
-    "Newsletter",
-    "Blog",
-    "TikTok",
-  ];
 
   useEffect(() => {
     if (isOpen) {
@@ -86,12 +99,30 @@ export function ContentModal({
             setStatus(defaultStage);
           }
         })
-        .catch(() => {
-          // ignore or handle
-        });
+        .catch(() => {});
       setErrors({});
     }
   }, [isOpen, contentToEdit, defaultStage]);
+
+  const clientSelectOptions: SelectOption[] = useMemo(
+    () =>
+      clientOptions.map((c) => ({
+        value: c.company || c.name,
+        label: c.company || c.name,
+        subLabel: c.industry,
+      })),
+    [clientOptions]
+  );
+
+  const assigneeSelectOptions: SelectOption[] = useMemo(
+    () =>
+      employeeOptions.map((e) => ({
+        value: e.name,
+        label: e.name,
+        subLabel: `${e.role} • ${e.department}`,
+      })),
+    [employeeOptions]
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,7 +130,7 @@ export function ContentModal({
 
     if (!title.trim()) newErrors.title = "Content title is required";
     if (!client.trim()) newErrors.client = "Client is required";
-    if (!assignee.trim()) newErrors.assignee = "Assigned employee is required";
+    if (!assignee.trim()) newErrors.assignee = "Assignee is required";
     if (!dueDate.trim()) newErrors.dueDate = "Due date is required";
 
     if (Object.keys(newErrors).length > 0) {
@@ -115,7 +146,7 @@ export function ContentModal({
       const client_id = matchingClient?.id || contentToEdit?.client_id;
 
       if (contentToEdit) {
-        const updated = await DataService.updateContent(contentToEdit.id, {
+        const updated = await DataService.updateContentItem(contentToEdit.id, {
           title: title.trim(),
           client: client.trim(),
           client_id,
@@ -128,11 +159,11 @@ export function ContentModal({
           status,
         });
         if (updated) {
-          toast.success("Content item updated");
+          toast.success("Content asset updated in Supabase");
           onSaved?.(updated);
         }
       } else {
-        const created = await DataService.createContent({
+        const created = await DataService.createContentItem({
           title: title.trim(),
           client: client.trim(),
           client_id,
@@ -144,12 +175,12 @@ export function ContentModal({
           dueDate,
           status,
         });
-        toast.success(`Content "${created.title}" created in ${created.status}`);
+        toast.success(`Content "${created.title}" added to pipeline in Supabase`);
         onSaved?.(created);
       }
       onClose();
-    } catch {
-      toast.error("Failed to save content item.");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save content to Supabase.");
     } finally {
       setLoading(false);
     }
@@ -159,177 +190,127 @@ export function ContentModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={contentToEdit ? "Edit Content Item" : "Create New Content"}
-      subtitle={contentToEdit ? "Update content pipeline asset and delivery details." : "Add a new content asset to the production pipeline."}
-      maxWidth="xl"
-    >
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-            Content Title <span className="text-rose-500">*</span>
-          </label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. 5 Strategies for AI Workflow Integration"
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-          />
-          {errors.title && <p className="mt-1 text-xs text-rose-500">{errors.title}</p>}
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Client <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={client}
-              onChange={(e) => setClient(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              {clientOptions.map((c) => (
-                <option key={String(c.id)} value={c.company || c.name}>
-                  {c.company || c.name}
-                </option>
-              ))}
-              {clientOptions.length === 0 && <option value="Northstar Labs">Northstar Labs</option>}
-            </select>
-            {errors.client && <p className="mt-1 text-xs text-rose-500">{errors.client}</p>}
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Assigned Employee <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={assignee}
-              onChange={(e) => setAssignee(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              {employeeOptions.map((emp) => (
-                <option key={String(emp.id)} value={emp.name}>
-                  {emp.name} ({emp.department})
-                </option>
-              ))}
-              {employeeOptions.length === 0 && <option value="Maya Chen">Maya Chen</option>}
-            </select>
-            {errors.assignee && <p className="mt-1 text-xs text-rose-500">{errors.assignee}</p>}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Content Type
-            </label>
-            <select
-              value={contentType}
-              onChange={(e) => setContentType(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              {CONTENT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Target Platform
-            </label>
-            <select
-              value={platform}
-              onChange={(e) => setPlatform(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              {PLATFORMS.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-            Description / Brief
-          </label>
-          <textarea
-            rows={3}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Outline main talking points, creative direction, or copy ideas..."
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Priority
-            </label>
-            <select
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as any)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Due Date <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            />
-            {errors.dueDate && <p className="mt-1 text-xs text-rose-500">{errors.dueDate}</p>}
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Pipeline Stage
-            </label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as ContentStage)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              {CONTENT_STAGES.map((st) => (
-                <option key={st} value={st}>
-                  {st}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+      title={contentToEdit ? "Edit Content Asset" : "Create New Content Asset"}
+      subtitle={
+        contentToEdit
+          ? "Update publication metadata, creative brief, and assigned creators."
+          : "Add an asset to the 8-stage content production pipeline."
+      }
+      maxWidth="3xl"
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
+            className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="submit"
+            form="content-modal-form"
             disabled={loading}
-            className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2"
+            className="rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2 shadow-sm"
           >
-            {loading ? "Saving..." : contentToEdit ? "Save Changes" : "Create Content"}
+            {loading ? "Saving..." : contentToEdit ? "Save Changes" : "Publish to Pipeline"}
           </button>
+        </>
+      }
+    >
+      <form id="content-modal-form" onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+            Asset Headline / Title <span className="text-rose-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. 5 Enterprise AI Playbooks Transforming Retention"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
+          />
+          {errors.title && <p className="mt-1 text-xs text-rose-500">{errors.title}</p>}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SearchableSelect
+            label="Client Account"
+            required
+            options={clientSelectOptions}
+            value={client}
+            onChange={(val) => setClient(val)}
+            placeholder="Select client..."
+            error={errors.client}
+          />
+
+          <SearchableSelect
+            label="Assigned Creator / Strategist"
+            required
+            options={assigneeSelectOptions}
+            value={assignee}
+            onChange={(val) => setAssignee(val)}
+            placeholder="Select creator..."
+            error={errors.assignee}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SearchableSelect
+            label="Content Format"
+            options={CONTENT_TYPES}
+            value={contentType}
+            onChange={(val) => setContentType(val)}
+          />
+
+          <SearchableSelect
+            label="Distribution Platform"
+            options={PLATFORMS}
+            value={platform}
+            onChange={(val) => setPlatform(val)}
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+            Creative Brief & Deliverable Notes
+          </label>
+          <textarea
+            rows={3}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Key talking points, angle, call to action, or link to research docs..."
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+              Target Due Date <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
+            />
+            {errors.dueDate && <p className="mt-1 text-xs text-rose-500">{errors.dueDate}</p>}
+          </div>
+
+          <SearchableSelect
+            label="Priority Level"
+            options={PRIORITY_OPTIONS}
+            value={priority}
+            onChange={(val) => setPriority(val)}
+          />
+
+          <SearchableSelect
+            label="Pipeline Stage"
+            options={STAGE_OPTIONS}
+            value={status}
+            onChange={(val) => setStatus(val)}
+          />
         </div>
       </form>
     </Modal>

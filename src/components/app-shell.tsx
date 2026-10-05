@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useRef } from "react";
-import { getCurrentUser, getRoleBasedNavigation, logout, DemoUser } from "@/services/authService";
+import { getCurrentUser, logout, DemoUser, getRoleBasedNavigation } from "@/services/authService";
+import { DataService, NavigationMenuItem } from "@/services/dataService";
+import { Modal } from "./modal";
 
 export function AppShell({
   title,
@@ -19,38 +21,66 @@ export function AppShell({
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<DemoUser | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dbMenuItems, setDbMenuItems] = useState<NavigationMenuItem[]>([]);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
 
+  // Load user session
   useEffect(() => {
-    setCurrentUser(getCurrentUser());
+    const user = getCurrentUser();
+    setCurrentUser(user);
+
+    // Fetch database-driven navigation menu
+    DataService.getNavigationMenu()
+      .then((items) => {
+        if (items && items.length > 0) {
+          setDbMenuItems(items);
+        }
+      })
+      .catch(() => {});
   }, []);
 
-  // Close dropdown on outside click
+  // Close profile dropdown on outside click
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setUserDropdownOpen(false);
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setProfileMenuOpen(false);
       }
     };
-    if (userDropdownOpen) {
+    if (profileMenuOpen) {
       document.addEventListener("mousedown", handleOutsideClick);
     }
     return () => {
       document.removeEventListener("mousedown", handleOutsideClick);
     };
-  }, [userDropdownOpen]);
+  }, [profileMenuOpen]);
 
-  const navigationItems = useMemo(
-    () => [
-      ...getRoleBasedNavigation(currentUser?.role ?? "admin"),
-      { href: "/login", label: "Logout", icon: "↩" },
-    ],
-    [currentUser?.role],
-  );
+  // Main navigation items: Filter out Settings and Logout from main sidebar list
+  const navigationItems = useMemo(() => {
+    if (dbMenuItems.length > 0) {
+      return dbMenuItems.filter(
+        (item) =>
+          !item.label.toLowerCase().includes("setting") &&
+          !item.label.toLowerCase().includes("logout") &&
+          item.href !== "/settings" &&
+          item.href !== "/login"
+      );
+    }
+
+    const fallback = getRoleBasedNavigation(currentUser?.role ?? "admin");
+    return fallback.filter(
+      (item) =>
+        item.label !== "Settings" &&
+        item.label !== "Logout" &&
+        item.href !== "/settings" &&
+        item.href !== "/login"
+    );
+  }, [dbMenuItems, currentUser?.role]);
 
   const handleLogout = async () => {
+    setProfileMenuOpen(false);
     await logout();
     router.push("/login");
   };
@@ -68,7 +98,7 @@ export function AppShell({
     <div className="min-h-screen bg-slate-100 text-slate-800">
       {/* Mobile overlay */}
       <div
-        className={`fixed inset-0 z-30 bg-slate-900/35 transition lg:hidden ${
+        className={`fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs transition lg:hidden ${
           mobileOpen ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
         onClick={() => setMobileOpen(false)}
@@ -76,54 +106,42 @@ export function AppShell({
 
       {/* Sidebar */}
       <aside
-        className={`fixed left-0 top-0 z-40 h-screen w-72 border-r border-slate-200 bg-white px-5 py-6 shadow-sm transition-transform duration-200 lg:flex lg:flex-col ${
+        className={`fixed left-0 top-0 z-50 h-screen w-72 border-r border-slate-200 bg-white shadow-sm transition-transform duration-200 flex flex-col justify-between ${
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
-        <div className="flex items-center justify-between px-2 lg:justify-start">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-lg font-semibold text-white shadow-sm">
-              i
-            </div>
-            <div>
-              <div className="text-xs uppercase tracking-[0.24em] text-slate-400">Insight</div>
-              <div className="text-lg font-semibold text-slate-900">One</div>
-            </div>
-          </Link>
-          <button
-            type="button"
-            className="rounded-lg border border-slate-200 p-2 text-slate-600 lg:hidden"
-            onClick={() => setMobileOpen(false)}
-            aria-label="Close menu"
-          >
-            ✕
-          </button>
+        {/* Top: Logo & Branding */}
+        <div className="px-6 pt-6 pb-4">
+          <div className="flex items-center justify-between">
+            <Link href="/dashboard" className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-lg font-semibold text-white shadow-sm">
+                i
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-bold tracking-[0.24em] text-slate-400">Insight</div>
+                <div className="text-lg font-bold text-slate-900 tracking-tight">One</div>
+              </div>
+            </Link>
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 p-1.5 text-slate-500 lg:hidden hover:bg-slate-50"
+              onClick={() => setMobileOpen(false)}
+              aria-label="Close menu"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
-        {/* Navigation list */}
-        <div className="mt-8 space-y-1 overflow-y-auto max-h-[calc(100vh-200px)] pr-1">
+        {/* Middle: Main Application Modules Only */}
+        <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
+          <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+            Workspace Modules
+          </div>
+
           {navigationItems.map((item) => {
             const active =
-              item.href === "/login"
-                ? pathname === "/login"
-                : pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-
-            if (item.label === "Logout") {
-              return (
-                <button
-                  key={item.label}
-                  type="button"
-                  onClick={() => {
-                    setMobileOpen(false);
-                    handleLogout();
-                  }}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-500 transition hover:bg-rose-50 hover:text-rose-600"
-                >
-                  <span className="w-5 text-center text-base">{item.icon}</span>
-                  <span>{item.label}</span>
-                </button>
-              );
-            }
+              pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
 
             return (
               <Link
@@ -131,10 +149,10 @@ export function AppShell({
                 href={item.href}
                 onClick={() => setMobileOpen(false)}
                 className={[
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
+                  "flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition",
                   active
                     ? "bg-slate-900 text-white shadow-sm"
-                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-900",
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
                 ].join(" ")}
               >
                 <span className="w-5 text-center text-base">{item.icon}</span>
@@ -144,24 +162,91 @@ export function AppShell({
           })}
         </div>
 
-        {/* Footer info in sidebar */}
-        <div className="mt-auto pt-4">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-center gap-2">
-              <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <div className="text-xs font-semibold text-slate-700">Insight One System</div>
+        {/* Bottom-Left: Logged-in User Profile Section with Context Menu */}
+        <div className="relative border-t border-slate-200 p-3 bg-slate-50/70" ref={profileMenuRef}>
+          {/* Profile Popup Context Menu */}
+          {profileMenuOpen && (
+            <div className="absolute bottom-full left-3 right-3 mb-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-150 z-50">
+              <div className="border-b border-slate-100 px-3 py-2.5">
+                <div className="text-xs font-semibold text-slate-900 truncate">
+                  {currentUser?.name ?? "Admin User"}
+                </div>
+                <div className="text-[11px] text-slate-500 truncate">
+                  {currentUser?.email ?? "admin@insightone.com"}
+                </div>
+                <div className="mt-1.5 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700 capitalize">
+                  {currentUser?.role ?? "Admin"} Account
+                </div>
+              </div>
+
+              <div className="py-1 space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileMenuOpen(false);
+                    setProfileModalOpen(true);
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 transition"
+                >
+                  <span className="text-sm">👤</span>
+                  <span>View Profile</span>
+                </button>
+
+                <Link
+                  href="/settings"
+                  onClick={() => setProfileMenuOpen(false)}
+                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 transition"
+                >
+                  <span className="text-sm">⚙</span>
+                  <span>Workspace Settings</span>
+                </Link>
+
+                <div className="border-t border-slate-100 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition"
+                  >
+                    <span className="text-sm">↩</span>
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="mt-1 text-xs text-slate-500">
-              Role: <span className="font-medium text-slate-700 capitalize">{currentUser?.role ?? "Admin"}</span> • Active
+          )}
+
+          {/* Profile Click Target in Bottom-Left of Sidebar */}
+          <button
+            type="button"
+            onClick={() => setProfileMenuOpen((prev) => !prev)}
+            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2.5 text-left hover:border-slate-300 hover:shadow-sm transition"
+            aria-expanded={profileMenuOpen}
+            aria-haspopup="true"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 font-bold text-xs text-white shadow-sm">
+                {getInitials(currentUser?.name)}
+              </div>
+              <div className="min-w-0 truncate">
+                <div className="text-xs font-bold text-slate-900 truncate">
+                  {currentUser?.name ?? "Admin User"}
+                </div>
+                <div className="text-[11px] text-slate-500 capitalize truncate">
+                  {currentUser?.role ?? "Admin"} • Active
+                </div>
+              </div>
             </div>
-          </div>
+            <span className="text-xs text-slate-400 shrink-0">▲</span>
+          </button>
         </div>
       </aside>
 
-      {/* Main Workspace Area */}
-      <div className="lg:pl-72">
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur-md">
-          <div className="flex items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+      {/* Main Content Area */}
+      <div className="lg:pl-72 flex flex-col min-h-screen">
+        {/* PART 3: Fixed / Sticky Page Header */}
+        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur-md shadow-xs">
+          <div className="flex items-center justify-between px-4 py-3.5 sm:px-6 lg:px-8">
+            {/* Left: Title & Navigation */}
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -172,89 +257,81 @@ export function AppShell({
                 ☰
               </button>
               <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Workspace</div>
-                <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                  Workspace
+                </div>
+                <h1 className="text-lg sm:text-xl font-bold text-slate-900 leading-tight">
+                  {title}
+                </h1>
               </div>
             </div>
 
+            {/* Right: Primary Page Actions Fixed in Top-Right Corner */}
             <div className="flex items-center gap-3">
               {actions}
-
-              {/* User profile dropdown button */}
-              <div className="relative" ref={dropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setUserDropdownOpen((prev) => !prev)}
-                  className="flex items-center gap-2.5 rounded-full border border-slate-200 bg-slate-50 px-2 py-1.5 hover:bg-slate-100 transition focus:outline-none focus:ring-2 focus:ring-slate-400"
-                  aria-expanded={userDropdownOpen}
-                  aria-haspopup="true"
-                >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-slate-800 to-slate-600 text-xs font-semibold text-white shadow-sm">
-                    {getInitials(currentUser?.name)}
-                  </div>
-                  <div className="hidden text-left sm:block pr-1">
-                    <div className="text-xs font-semibold text-slate-800 leading-tight">
-                      {currentUser?.name ?? "Admin User"}
-                    </div>
-                    <div className="text-[10px] uppercase font-medium text-slate-400">
-                      {currentUser?.role ?? "Admin"}
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-slate-400">▼</span>
-                </button>
-
-                {/* Dropdown Menu */}
-                {userDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl animate-in fade-in zoom-in-95 duration-100 z-50">
-                    <div className="border-b border-slate-100 px-3 py-2.5">
-                      <div className="text-xs font-semibold text-slate-900">
-                        {currentUser?.name ?? "Admin User"}
-                      </div>
-                      <div className="text-xs text-slate-500 truncate">
-                        {currentUser?.email ?? "admin@insightone.com"}
-                      </div>
-                      <div className="mt-1.5 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700 capitalize">
-                        {currentUser?.role ?? "Admin"} account
-                      </div>
-                    </div>
-
-                    <div className="py-1">
-                      <Link
-                        href="/settings"
-                        onClick={() => setUserDropdownOpen(false)}
-                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                      >
-                        <span>⚙</span>
-                        <span>Workspace Settings</span>
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUserDropdownOpen(false);
-                          handleLogout();
-                        }}
-                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50"
-                      >
-                        <span>↩</span>
-                        <span>Sign out</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </header>
 
-        <main className="px-4 py-6 sm:px-6 lg:px-8">
+        {/* Scrollable Page Body */}
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
           {subtitle ? (
-            <div className="mb-6 flex items-center justify-between gap-3">
-              <p className="text-sm text-slate-500">{subtitle}</p>
+            <div className="mb-6">
+              <p className="text-xs sm:text-sm text-slate-500">{subtitle}</p>
             </div>
           ) : null}
           {children}
         </main>
       </div>
+
+      {/* User Profile Modal */}
+      <Modal
+        isOpen={profileModalOpen}
+        onClose={() => setProfileModalOpen(false)}
+        title="Your Profile"
+        subtitle="Current user profile and organization details"
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-xl font-bold text-white shadow-md">
+              {getInitials(currentUser?.name)}
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">{currentUser?.name}</h3>
+              <p className="text-xs text-slate-500">{currentUser?.email}</p>
+              <div className="mt-1 inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700 capitalize">
+                {currentUser?.role} Account
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 p-4 space-y-2 text-xs">
+            <div className="flex justify-between py-1 border-b border-slate-100">
+              <span className="text-slate-400 font-semibold uppercase">Organization:</span>
+              <span className="font-semibold text-slate-800">Insight One Enterprise</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-slate-100">
+              <span className="text-slate-400 font-semibold uppercase">Tenant ID:</span>
+              <span className="font-semibold text-slate-800">1 (Primary Tenant)</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="text-slate-400 font-semibold uppercase">Security Mode:</span>
+              <span className="font-semibold text-emerald-600">PostgreSQL Security Definer</span>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              onClick={() => setProfileModalOpen(false)}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

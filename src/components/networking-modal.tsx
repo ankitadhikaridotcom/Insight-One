@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Modal } from "./modal";
 import { useToast } from "./toast";
 import { DataService, NetworkingEntry } from "@/services/dataService";
+import { SearchableSelect, SelectOption } from "./searchable-select";
 
 interface NetworkingModalProps {
   isOpen: boolean;
@@ -11,6 +12,20 @@ interface NetworkingModalProps {
   entryToEdit?: NetworkingEntry | null;
   onSaved?: (entry: NetworkingEntry) => void;
 }
+
+const TYPE_OPTIONS: SelectOption[] = [
+  { value: "Call", label: "Phone / Intro Call", subLabel: "Direct 1-on-1 audio chat" },
+  { value: "Coffee", label: "Coffee / In-Person", subLabel: "Local casual meeting" },
+  { value: "Conference", label: "Industry Conference", subLabel: "Event networking & summit" },
+  { value: "Partnership", label: "Partnership Strategy", subLabel: "Co-marketing or agency alliance" },
+  { value: "Meeting", label: "Formal Presentation", subLabel: "Executive pitch or demo" },
+];
+
+const STATUS_OPTIONS: SelectOption[] = [
+  { value: "Connected", label: "Connected", subLabel: "Initial dialogue established" },
+  { value: "Planned", label: "Planned", subLabel: "Scheduled on upcoming calendar" },
+  { value: "Follow-up", label: "Follow-up", subLabel: "Action items or proposal pending" },
+];
 
 export function NetworkingModal({
   isOpen,
@@ -76,7 +91,7 @@ export function NetworkingModal({
 
     try {
       if (entryToEdit) {
-        const updated = await DataService.updateNetworking(entryToEdit.id, {
+        const updated = await DataService.updateNetworkingContact(entryToEdit.id, {
           person: person.trim(),
           company: company.trim(),
           email: email.trim(),
@@ -88,11 +103,11 @@ export function NetworkingModal({
           followUpDate,
         });
         if (updated) {
-          toast.success("Networking entry updated");
+          toast.success("Networking entry updated in Supabase");
           onSaved?.(updated);
         }
       } else {
-        const created = await DataService.createNetworking({
+        const created = await DataService.createNetworkingContact({
           person: person.trim(),
           company: company.trim(),
           email: email.trim(),
@@ -103,12 +118,12 @@ export function NetworkingModal({
           notes: notes.trim(),
           followUpDate,
         });
-        toast.success(`Network entry for "${created.person}" logged successfully`);
+        toast.success(`Connected with "${created.person}" in Supabase`);
         onSaved?.(created);
       }
       onClose();
-    } catch {
-      toast.error("Failed to save networking record.");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save networking entry to Supabase.");
     } finally {
       setLoading(false);
     }
@@ -118,36 +133,60 @@ export function NetworkingModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={entryToEdit ? "Edit Networking Log" : "Add Networking Entry"}
-      subtitle={entryToEdit ? "Update contact relationship details and notes." : "Record a strategic interaction, call, or partner conversation."}
-      maxWidth="lg"
+      title={entryToEdit ? "Edit Networking Contact" : "Log Networking Interaction"}
+      subtitle={
+        entryToEdit
+          ? "Update stakeholder contact information and follow-up timeline."
+          : "Record an executive connection, agency partner, or client referral."
+      }
+      maxWidth="3xl"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="networking-modal-form"
+            disabled={loading}
+            className="rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2 shadow-sm"
+          >
+            {loading ? "Saving..." : entryToEdit ? "Save Changes" : "Log Connection"}
+          </button>
+        </>
+      }
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form id="networking-modal-form" onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Person Name <span className="text-rose-500">*</span>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+              Contact / Person Name <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
               value={person}
               onChange={(e) => setPerson(e.target.value)}
-              placeholder="e.g. Sarah Jenkins"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+              placeholder="e.g. Rhett Cole"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
             />
             {errors.person && <p className="mt-1 text-xs text-rose-500">{errors.person}</p>}
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Company <span className="text-rose-500">*</span>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+              Organization / Company <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
               value={company}
               onChange={(e) => setCompany(e.target.value)}
-              placeholder="e.g. Acme Media Group"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+              placeholder="e.g. Summit Media"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
             />
             {errors.company && <p className="mt-1 text-xs text-rose-500">{errors.company}</p>}
           </div>
@@ -155,120 +194,86 @@ export function NetworkingModal({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Email
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+              Email Address
             </label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="sarah@acme.com"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+              placeholder="rhett@summitmedia.co"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Phone
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+              Phone Number
             </label>
             <input
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="+1 (555) 234-5678"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+              placeholder="+1 (555) 749-1123"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SearchableSelect
+            label="Interaction Type"
+            options={TYPE_OPTIONS}
+            value={type}
+            onChange={(val) => setType(val)}
+          />
+
+          <SearchableSelect
+            label="Connection Status"
+            options={STATUS_OPTIONS}
+            value={status}
+            onChange={(val) => setStatus(val)}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
               Interaction Date <span className="text-rose-500">*</span>
             </label>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
             />
             {errors.date && <p className="mt-1 text-xs text-rose-500">{errors.date}</p>}
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Networking Type
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+              Next Follow-Up Date
             </label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value as any)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              <option value="Coffee">Coffee</option>
-              <option value="Call">Call</option>
-              <option value="Conference">Conference</option>
-              <option value="Partnership">Partnership</option>
-              <option value="Meeting">Meeting</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Status
-            </label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as any)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              <option value="Planned">Planned</option>
-              <option value="Connected">Connected</option>
-              <option value="Follow-up">Follow-up</option>
-            </select>
+            <input
+              type="date"
+              value={followUpDate}
+              onChange={(e) => setFollowUpDate(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
+            />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-            Notes / Discussion Points
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+            Discussion Summary & Partnership Opportunities
           </label>
           <textarea
             rows={3}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Key discussion takeaways, mutual synergies, next steps..."
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+            placeholder="Key talking points, collaboration synergies, next steps..."
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
           />
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-            Follow-up Date
-          </label>
-          <input
-            type="date"
-            value={followUpDate}
-            onChange={(e) => setFollowUpDate(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-          />
-        </div>
-
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={loading}
-            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2"
-          >
-            {loading ? "Saving..." : entryToEdit ? "Save Changes" : "Save Entry"}
-          </button>
         </div>
       </form>
     </Modal>

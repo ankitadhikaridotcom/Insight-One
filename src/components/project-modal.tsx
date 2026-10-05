@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Modal } from "./modal";
 import { useToast } from "./toast";
 import { DataService, Project, Client, Employee } from "@/services/dataService";
+import { SearchableSelect, SelectOption } from "./searchable-select";
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -27,7 +28,7 @@ export function ProjectModal({
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState<"Low" | "Medium" | "High">("Medium");
-  const [status, setStatus] = useState<"Planning" | "In Progress" | "On Hold" | "Completed">("Planning");
+  const [status, setStatus] = useState<"Planning" | "In Progress" | "Review" | "Completed" | "On Hold">("Planning");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -65,6 +66,39 @@ export function ProjectModal({
       setErrors({});
     }
   }, [isOpen, projectToEdit]);
+
+  const clientSelectOptions: SelectOption[] = useMemo(
+    () =>
+      clientOptions.map((c) => ({
+        value: c.company || c.name,
+        label: c.company || c.name,
+        subLabel: c.industry || c.status,
+      })),
+    [clientOptions]
+  );
+
+  const managerSelectOptions: SelectOption[] = useMemo(
+    () =>
+      employeeOptions.map((e) => ({
+        value: e.name,
+        label: e.name,
+        subLabel: `${e.role} • ${e.department}`,
+      })),
+    [employeeOptions]
+  );
+
+  const prioritySelectOptions: SelectOption[] = [
+    { value: "Low", label: "Low Priority", subLabel: "Routine milestone" },
+    { value: "Medium", label: "Medium Priority", subLabel: "Standard deliverable" },
+    { value: "High", label: "High Priority", subLabel: "Critical client deadline" },
+  ];
+
+  const statusSelectOptions: SelectOption[] = [
+    { value: "Planning", label: "Planning", subLabel: "Scoping and backlog" },
+    { value: "In Progress", label: "In Progress", subLabel: "Active execution" },
+    { value: "Review", label: "Review & QA", subLabel: "Internal and client review" },
+    { value: "Completed", label: "Completed", subLabel: "Deliverable signed off" },
+  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,6 +149,7 @@ export function ProjectModal({
           dueDate,
           priority,
           status,
+          progress: status === "Completed" ? 100 : status === "Review" ? 85 : status === "In Progress" ? 45 : 10,
         });
         toast.success(`Project "${created.name}" created in Supabase`);
         onSaved?.(created);
@@ -132,66 +167,72 @@ export function ProjectModal({
       isOpen={isOpen}
       onClose={onClose}
       title={projectToEdit ? "Edit Project" : "Create New Project"}
-      subtitle={projectToEdit ? "Update project details and timeline." : "Add a client project to track deliverables and milestones."}
-      maxWidth="xl"
+      subtitle={
+        projectToEdit
+          ? "Update project roadmap, deliverables, and team ownership."
+          : "Add a client project to track deliverables and milestones across the Kanban pipeline."
+      }
+      maxWidth="3xl"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="project-modal-form"
+            disabled={loading}
+            className="rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2 shadow-sm"
+          >
+            {loading ? "Saving..." : projectToEdit ? "Save Changes" : "Create Project"}
+          </button>
+        </>
+      }
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form id="project-modal-form" onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
             Project Name <span className="text-rose-500">*</span>
           </label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Q3 Brand Overhaul"
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+            placeholder="e.g. Q3 Multi-Channel Growth Engine"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
           />
           {errors.name && <p className="mt-1 text-xs text-rose-500">{errors.name}</p>}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Client <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={client}
-              onChange={(e) => setClient(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              {clientOptions.map((c) => (
-                <option key={String(c.id)} value={c.company || c.name}>
-                  {c.company || c.name}
-                </option>
-              ))}
-              {clientOptions.length === 0 && <option value="Northstar Labs">Northstar Labs</option>}
-            </select>
-            {errors.client && <p className="mt-1 text-xs text-rose-500">{errors.client}</p>}
-          </div>
+          <SearchableSelect
+            label="Client Account"
+            required
+            options={clientSelectOptions}
+            value={client}
+            onChange={(val) => setClient(val)}
+            placeholder="Select client company..."
+            error={errors.client}
+          />
 
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Project Manager <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={manager}
-              onChange={(e) => setManager(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              {employeeOptions.map((emp) => (
-                <option key={String(emp.id)} value={emp.name}>
-                  {emp.name} ({emp.role})
-                </option>
-              ))}
-              {employeeOptions.length === 0 && <option value="Maya Chen">Maya Chen</option>}
-            </select>
-            {errors.manager && <p className="mt-1 text-xs text-rose-500">{errors.manager}</p>}
-          </div>
+          <SearchableSelect
+            label="Project Lead / Manager"
+            required
+            options={managerSelectOptions}
+            value={manager}
+            onChange={(val) => setManager(val)}
+            placeholder="Select project lead..."
+            error={errors.manager}
+          />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
             Assigned Team Members
           </label>
           <input
@@ -199,99 +240,64 @@ export function ProjectModal({
             value={assignedTeam}
             onChange={(e) => setAssignedTeam(e.target.value)}
             placeholder="e.g. Maya Chen, Alex Rivera, Priya Shah"
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-            Description
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+            Description & Scope
           </label>
           <textarea
             rows={3}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Brief scope, target objectives, and expected deliverables..."
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+            placeholder="Target objectives, deliverable parameters, and milestone roadmap..."
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
           />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
               Start Date
             </label>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
               Due Date <span className="text-rose-500">*</span>
             </label>
             <input
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
             />
             {errors.dueDate && <p className="mt-1 text-xs text-rose-500">{errors.dueDate}</p>}
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Priority
-            </label>
-            <select
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as any)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-            </select>
-          </div>
+          <SearchableSelect
+            label="Priority Level"
+            options={prioritySelectOptions}
+            value={priority}
+            onChange={(val) => setPriority(val)}
+          />
 
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Status
-            </label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as any)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              <option value="Planning">Planning</option>
-              <option value="In Progress">In Progress</option>
-              <option value="On Hold">On Hold</option>
-              <option value="Completed">Completed</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={loading}
-            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2"
-          >
-            {loading ? "Saving..." : projectToEdit ? "Save Changes" : "Create Project"}
-          </button>
+          <SearchableSelect
+            label="Kanban Status"
+            options={statusSelectOptions}
+            value={status}
+            onChange={(val) => setStatus(val)}
+          />
         </div>
       </form>
     </Modal>

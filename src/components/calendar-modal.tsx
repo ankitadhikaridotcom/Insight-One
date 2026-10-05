@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Modal } from "./modal";
 import { useToast } from "./toast";
 import { DataService, CalendarEvent, Client } from "@/services/dataService";
+import { SearchableSelect, SelectOption } from "./searchable-select";
 
 interface CalendarModalProps {
   isOpen: boolean;
@@ -13,6 +14,13 @@ interface CalendarModalProps {
   initialType?: "Meeting" | "Task" | "Content Deadline" | "Launch";
   onSaved?: (event: CalendarEvent) => void;
 }
+
+const EVENT_TYPE_OPTIONS: SelectOption[] = [
+  { value: "Meeting", label: "Client / Team Meeting", subLabel: "Synchronous discussion or standup" },
+  { value: "Content Deadline", label: "Content Deliverable Deadline", subLabel: "Asset submission target" },
+  { value: "Launch", label: "Campaign / Product Launch", subLabel: "Go-live milestone" },
+  { value: "Task", label: "Operational Sprint Task", subLabel: "Scheduled execution block" },
+];
 
 export function CalendarModal({
   isOpen,
@@ -64,6 +72,16 @@ export function CalendarModal({
     }
   }, [isOpen, eventToEdit, initialDate, initialType]);
 
+  const clientSelectOptions: SelectOption[] = useMemo(
+    () =>
+      clientOptions.map((c) => ({
+        value: c.company || c.name,
+        label: c.company || c.name,
+        subLabel: c.industry,
+      })),
+    [clientOptions]
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
@@ -83,38 +101,21 @@ export function CalendarModal({
       const matchingClient = clientOptions.find((c) => c.company === client.trim() || c.name === client.trim());
       const client_id = matchingClient?.id || eventToEdit?.client_id;
 
-      if (eventToEdit) {
-        const updated = await DataService.updateEvent(eventToEdit.id, {
-          title: title.trim(),
-          date,
-          startTime,
-          endTime,
-          type,
-          client: client.trim(),
-          client_id,
-          description: description.trim(),
-        });
-        if (updated) {
-          toast.success("Calendar event updated");
-          onSaved?.(updated);
-        }
-      } else {
-        const created = await DataService.createEvent({
-          title: title.trim(),
-          date,
-          startTime,
-          endTime,
-          type,
-          client: client.trim(),
-          client_id,
-          description: description.trim(),
-        });
-        toast.success(`Event "${created.title}" scheduled`);
-        onSaved?.(created);
-      }
+      const created = await DataService.createCalendarEvent({
+        title: title.trim(),
+        client_id,
+        client: client.trim(),
+        date,
+        startTime,
+        endTime,
+        type,
+        description: description.trim(),
+      });
+      toast.success(`Event "${created.title}" scheduled in Supabase`);
+      onSaved?.(created);
       onClose();
-    } catch {
-      toast.error("Failed to save calendar event.");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save calendar event to Supabase.");
     } finally {
       setLoading(false);
     }
@@ -125,128 +126,115 @@ export function CalendarModal({
       isOpen={isOpen}
       onClose={onClose}
       title={eventToEdit ? "Edit Calendar Event" : "Schedule New Event"}
-      subtitle={eventToEdit ? "Update event details and schedule." : "Schedule a client meeting, launch, task, or content deadline."}
-      maxWidth="lg"
+      subtitle={
+        eventToEdit
+          ? "Update meeting details, deliverables, and calendar timing."
+          : "Add a meeting, milestone, or deliverable deadline to the agency calendar."
+      }
+      maxWidth="3xl"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="calendar-modal-form"
+            disabled={loading}
+            className="rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2 shadow-sm"
+          >
+            {loading ? "Saving..." : eventToEdit ? "Save Changes" : "Schedule Event"}
+          </button>
+        </>
+      }
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form id="calendar-modal-form" onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
             Event Title <span className="text-rose-500">*</span>
           </label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Q3 Roadmap Review or Content Asset Draft Due"
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+            placeholder="e.g. Q3 Quarterly Business Review with Northstar Labs"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
           />
           {errors.title && <p className="mt-1 text-xs text-rose-500">{errors.title}</p>}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Event Type <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value as any)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              <option value="Meeting">Meeting</option>
-              <option value="Content Deadline">Content Deadline</option>
-              <option value="Task">Task</option>
-              <option value="Launch">Launch</option>
-            </select>
-          </div>
+          <SearchableSelect
+            label="Associated Client"
+            options={clientSelectOptions}
+            value={client}
+            onChange={(val) => setClient(val)}
+            placeholder="Select client account..."
+          />
 
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Client
-            </label>
-            <select
-              value={client}
-              onChange={(e) => setClient(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              {clientOptions.map((c) => (
-                <option key={String(c.id)} value={c.company || c.name}>
-                  {c.company || c.name}
-                </option>
-              ))}
-              {clientOptions.length === 0 && <option value="Northstar Labs">Northstar Labs</option>}
-            </select>
-          </div>
+          <SearchableSelect
+            label="Event Type"
+            options={EVENT_TYPE_OPTIONS}
+            value={type}
+            onChange={(val) => setType(val)}
+          />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Date <span className="text-rose-500">*</span>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+              Event Date <span className="text-rose-500">*</span>
             </label>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
             />
             {errors.date && <p className="mt-1 text-xs text-rose-500">{errors.date}</p>}
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
               Start Time
             </label>
             <input
               type="time"
               value={startTime}
               onChange={(e) => setStartTime(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
               End Time
             </label>
             <input
               type="time"
               value={endTime}
               onChange={(e) => setEndTime(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-            Description / Agenda
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+            Meeting Agenda / Description
           </label>
           <textarea
             rows={3}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Agenda items, video call link, or deadline checklist..."
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+            placeholder="Agenda items, video conference link, or milestone scope..."
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
           />
-        </div>
-
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={loading}
-            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2"
-          >
-            {loading ? "Saving..." : eventToEdit ? "Save Changes" : "Schedule Event"}
-          </button>
         </div>
       </form>
     </Modal>

@@ -49,8 +49,18 @@ export default function SettingsPage() {
       <AppShell
         title="Workspace Settings"
         subtitle="Manage organization identity, operational timezones, compliance security policies, and live Supabase cloud connectivity."
+        actions={
+          <button
+            form="settings-form"
+            type="submit"
+            disabled={loading}
+            className="flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 transition disabled:opacity-50 shadow-sm"
+          >
+            {loading ? "Saving..." : "Save Settings"}
+          </button>
+        }
       >
-        <form onSubmit={handleSave} className="space-y-6 max-w-5xl">
+        <form id="settings-form" onSubmit={handleSave} className="space-y-6 max-w-5xl">
           {/* Top Section: Organization Identity & Regional Localization */}
           <div className="grid gap-6 md:grid-cols-2">
             {/* Organization Identity */}

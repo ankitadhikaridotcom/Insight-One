@@ -110,7 +110,7 @@ export default function EngagementPage() {
             className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 shadow-sm transition"
           >
             <span>+</span>
-            <span>Add engagement</span>
+            <span>Add Engagement</span>
           </button>
         }
       >

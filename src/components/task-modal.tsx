@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Modal } from "./modal";
 import { useToast } from "./toast";
 import { DataService, Task, Client, Employee } from "@/services/dataService";
+import { SearchableSelect, SelectOption } from "./searchable-select";
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -45,7 +46,7 @@ export function TaskModal({
             setClient(taskToEdit.client);
             setAssignee(taskToEdit.assignee);
             setPriority(taskToEdit.priority || "Medium");
-            setStatus(taskToEdit.status || "To Do");
+            setStatus(taskToEdit.status as any || "To Do");
             setDueDate(taskToEdit.dueDate || "");
           } else {
             setTitle("");
@@ -61,6 +62,39 @@ export function TaskModal({
       setErrors({});
     }
   }, [isOpen, taskToEdit]);
+
+  const clientSelectOptions: SelectOption[] = useMemo(
+    () =>
+      clientOptions.map((c) => ({
+        value: c.company || c.name,
+        label: c.company || c.name,
+        subLabel: c.industry,
+      })),
+    [clientOptions]
+  );
+
+  const assigneeSelectOptions: SelectOption[] = useMemo(
+    () =>
+      employeeOptions.map((e) => ({
+        value: e.name,
+        label: e.name,
+        subLabel: `${e.role} • ${e.department}`,
+      })),
+    [employeeOptions]
+  );
+
+  const priorityOptions: SelectOption[] = [
+    { value: "Low", label: "Low Priority", subLabel: "Flexible delivery" },
+    { value: "Medium", label: "Medium Priority", subLabel: "Standard priority" },
+    { value: "High", label: "High Priority", subLabel: "Urgent turnaround" },
+  ];
+
+  const statusOptions: SelectOption[] = [
+    { value: "To Do", label: "To Do", subLabel: "Pending kickoff" },
+    { value: "In Progress", label: "In Progress", subLabel: "Currently being worked on" },
+    { value: "Review", label: "Review", subLabel: "Quality review" },
+    { value: "Completed", label: "Completed", subLabel: "Finished & verified" },
+  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +129,7 @@ export function TaskModal({
           dueDate,
         });
         if (updated) {
-          toast.success("Task updated successfully");
+          toast.success("Task updated successfully in Supabase");
           onSaved?.(updated);
         }
       } else {
@@ -109,12 +143,12 @@ export function TaskModal({
           status,
           dueDate,
         });
-        toast.success(`Task "${created.title}" created successfully`);
+        toast.success(`Task "${created.title}" created in Supabase`);
         onSaved?.(created);
       }
       onClose();
-    } catch {
-      toast.error("Failed to save task.");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save task to Supabase.");
     } finally {
       setLoading(false);
     }
@@ -125,139 +159,106 @@ export function TaskModal({
       isOpen={isOpen}
       onClose={onClose}
       title={taskToEdit ? "Edit Task" : "Create New Task"}
-      subtitle={taskToEdit ? "Update deliverable details, assignee, or status." : "Add a task deliverable and assign team ownership."}
-      maxWidth="lg"
+      subtitle={taskToEdit ? "Update deliverable scope and assignee." : "Assign a concrete action item or deliverable."}
+      maxWidth="3xl"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="task-modal-form"
+            disabled={loading}
+            className="rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2 shadow-sm"
+          >
+            {loading ? "Saving..." : taskToEdit ? "Save Changes" : "Create Task"}
+          </button>
+        </>
+      }
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form id="task-modal-form" onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
             Task Title <span className="text-rose-500">*</span>
           </label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Prepare quarterly review slide deck"
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+            placeholder="e.g. Audit Q3 LinkedIn analytics & benchmarks"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
           />
           {errors.title && <p className="mt-1 text-xs text-rose-500">{errors.title}</p>}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Client <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={client}
-              onChange={(e) => setClient(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              {clientOptions.map((c) => (
-                <option key={String(c.id)} value={c.company || c.name}>
-                  {c.company || c.name}
-                </option>
-              ))}
-              {clientOptions.length === 0 && <option value="Northstar Labs">Northstar Labs</option>}
-            </select>
-            {errors.client && <p className="mt-1 text-xs text-rose-500">{errors.client}</p>}
-          </div>
+          <SearchableSelect
+            label="Associated Client"
+            required
+            options={clientSelectOptions}
+            value={client}
+            onChange={(val) => setClient(val)}
+            placeholder="Select client..."
+            error={errors.client}
+          />
 
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Assigned Employee <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={assignee}
-              onChange={(e) => setAssignee(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              {employeeOptions.map((emp) => (
-                <option key={String(emp.id)} value={emp.name}>
-                  {emp.name} ({emp.role})
-                </option>
-              ))}
-              {employeeOptions.length === 0 && <option value="Alex Rivera">Alex Rivera</option>}
-            </select>
-            {errors.assignee && <p className="mt-1 text-xs text-rose-500">{errors.assignee}</p>}
-          </div>
+          <SearchableSelect
+            label="Assigned Team Member"
+            required
+            options={assigneeSelectOptions}
+            value={assignee}
+            onChange={(val) => setAssignee(val)}
+            placeholder="Select assignee..."
+            error={errors.assignee}
+          />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-            Description
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+            Description & Instructions
           </label>
           <textarea
             rows={3}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Details, acceptance criteria, or relevant links..."
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+            placeholder="Context, deliverable requirements, or links to assets..."
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
           />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Priority
-            </label>
-            <select
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as any)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-              Status
-            </label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as any)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-            >
-              <option value="To Do">To Do</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Blocked">Blocked</option>
-              <option value="Completed">Completed</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
               Due Date <span className="text-rose-500">*</span>
             </label>
             <input
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
             />
             {errors.dueDate && <p className="mt-1 text-xs text-rose-500">{errors.dueDate}</p>}
           </div>
-        </div>
 
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={loading}
-            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2"
-          >
-            {loading ? "Saving..." : taskToEdit ? "Save Changes" : "Create Task"}
-          </button>
+          <SearchableSelect
+            label="Priority"
+            options={priorityOptions}
+            value={priority}
+            onChange={(val) => setPriority(val)}
+          />
+
+          <SearchableSelect
+            label="Status"
+            options={statusOptions}
+            value={status}
+            onChange={(val) => setStatus(val)}
+          />
         </div>
       </form>
     </Modal>

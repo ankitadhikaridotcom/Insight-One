@@ -59,9 +59,36 @@ export async function login(email: string, password: string): Promise<DemoUser |
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedPassword = password.trim();
 
-  // 1. Check local credential vault for admin-assigned password
-  const vault = getAssignedUserCredentials();
-  const assigned = vault[normalizedEmail];
+  // 1. Attempt Supabase Auth signInWithPassword
+  try {
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password: normalizedPassword,
+    });
+
+    if (!signInError && signInData.user) {
+      // Fetch role and profile from database via RPC
+      let role: UserRole = "employee";
+      let name = signInData.user.user_metadata?.full_name || normalizedEmail.split("@")[0];
+
+      try {
+        const { data: profile } = await supabase.rpc("fn_user_me");
+        if (profile?.data) {
+          role = profile.data.role?.toLowerCase() === "admin" ? "admin" : "employee";
+          name = profile.data.full_name || name;
+        }
+      } catch {}
+
+      const user: DemoUser = {
+        id: signInData.user.id,
+        email: normalizedEmail,
+        name,
+        role,
+      };
+      saveAuthUser(user);
+      return user;
+    }
+  } catch {}
 
   // 2. Query Supabase profiles table for live account status and credentials
   try {
@@ -73,10 +100,12 @@ export async function login(email: string, password: string): Promise<DemoUser |
 
     if (profile) {
       const dbPassword = (profile as any).password;
-      const role: UserRole = profile.role?.toLowerCase().includes("admin") ? "admin" : "employee";
+      const role: UserRole = profile.role?.toLowerCase() === "admin" ? "admin" : "employee";
       const name = profile.full_name || normalizedEmail.split("@")[0];
 
-      // Password matches if it matches DB column, assigned vault, or default credentials
+      const vault = getAssignedUserCredentials();
+      const assigned = vault[normalizedEmail];
+
       const matchesPassword =
         (dbPassword && dbPassword === normalizedPassword) ||
         (assigned && assigned.password === normalizedPassword) ||
@@ -84,7 +113,7 @@ export async function login(email: string, password: string): Promise<DemoUser |
 
       if (matchesPassword) {
         const user: DemoUser = {
-          id: profile.id,
+          id: String(profile.id),
           email: normalizedEmail,
           name,
           role,
@@ -97,37 +126,20 @@ export async function login(email: string, password: string): Promise<DemoUser |
     console.warn("[Auth] profile lookup check:", err);
   }
 
-  // 3. If user matches assigned vault credentials
+  // 3. Check local credential vault for assigned team password
+  const vault = getAssignedUserCredentials();
+  const assigned = vault[normalizedEmail];
   if (assigned && assigned.password === normalizedPassword) {
     const user: DemoUser = {
       email: assigned.email,
       name: assigned.name || normalizedEmail.split("@")[0],
-      role: assigned.role || (normalizedEmail.includes("admin") ? "admin" : "employee"),
+      role: assigned.role || "employee",
     };
     saveAuthUser(user);
     return user;
   }
 
-  // 4. Attempt Supabase Auth signInWithPassword
-  try {
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email: normalizedEmail,
-      password: normalizedPassword,
-    });
-
-    if (!signInError && signInData.user) {
-      const user: DemoUser = {
-        id: signInData.user.id,
-        email: normalizedEmail,
-        name: signInData.user.user_metadata?.full_name || normalizedEmail.split("@")[0],
-        role: signInData.user.user_metadata?.role?.toLowerCase().includes("admin") ? "admin" : "employee",
-      };
-      saveAuthUser(user);
-      return user;
-    }
-  } catch {}
-
-  // 5. Check default system credentials
+  // 4. Default System Credentials Check
   if (DEFAULT_DEMO_CREDENTIALS[normalizedEmail] && DEFAULT_DEMO_CREDENTIALS[normalizedEmail].password === normalizedPassword) {
     const demo = DEFAULT_DEMO_CREDENTIALS[normalizedEmail];
     const user: DemoUser = {

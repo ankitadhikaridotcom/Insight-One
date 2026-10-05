@@ -11,6 +11,15 @@ import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
 
+type ProjectColumn = "Planning" | "In Progress" | "Review" | "Completed";
+
+const KANBAN_COLUMNS: { id: ProjectColumn; title: string; color: string; badgeBg: string }[] = [
+  { id: "Planning", title: "Planning", color: "border-amber-200 bg-amber-500/10 text-amber-800", badgeBg: "bg-amber-100 text-amber-800" },
+  { id: "In Progress", title: "In Progress", color: "border-blue-200 bg-blue-500/10 text-blue-800", badgeBg: "bg-blue-100 text-blue-800" },
+  { id: "Review", title: "Review & QA", color: "border-purple-200 bg-purple-500/10 text-purple-800", badgeBg: "bg-purple-100 text-purple-800" },
+  { id: "Completed", title: "Completed", color: "border-emerald-200 bg-emerald-500/10 text-emerald-800", badgeBg: "bg-emerald-100 text-emerald-800" },
+];
+
 export default function ProjectsPage() {
   const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -18,7 +27,6 @@ export default function ProjectsPage() {
 
   // Search & Filter state
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
   const [priorityFilter, setPriorityFilter] = useState("ALL");
 
   // Modals state
@@ -26,6 +34,7 @@ export default function ProjectsPage() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [viewingProject, setViewingProject] = useState<Project | null>(null);
   const [deletingProject, setDeletingProject] = useState<Project | null>(null);
+  const [movingProjectId, setMovingProjectId] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
@@ -57,12 +66,50 @@ export default function ProjectsPage() {
           .toLowerCase()
           .includes(query.toLowerCase());
 
-      const matchesStatus = statusFilter === "ALL" || p.status === statusFilter;
       const matchesPriority = priorityFilter === "ALL" || p.priority === priorityFilter;
 
-      return matchesQuery && matchesStatus && matchesPriority;
+      return matchesQuery && matchesPriority;
     });
-  }, [projects, query, statusFilter, priorityFilter]);
+  }, [projects, query, priorityFilter]);
+
+  // Group projects by Kanban columns
+  const columnProjects = useMemo(() => {
+    const map: Record<ProjectColumn, Project[]> = {
+      Planning: [],
+      "In Progress": [],
+      Review: [],
+      Completed: [],
+    };
+
+    filteredProjects.forEach((p) => {
+      const statusKey = p.status as ProjectColumn;
+      if (map[statusKey]) {
+        map[statusKey].push(p);
+      } else {
+        // Fallback for unexpected statuses like "On Hold"
+        map.Planning.push(p);
+      }
+    });
+
+    return map;
+  }, [filteredProjects]);
+
+  // Persist status change to Supabase via RPC
+  const handleStatusChange = async (projectId: string, newStatus: ProjectColumn) => {
+    setMovingProjectId(projectId);
+    try {
+      const progress = newStatus === "Completed" ? 100 : newStatus === "Review" ? 85 : newStatus === "In Progress" ? 45 : 15;
+      await DataService.updateProjectStatus(projectId, newStatus, progress);
+      toast.success(`Project moved to "${newStatus}".`);
+      setProjects((prev) =>
+        prev.map((p) => (p.id === projectId ? { ...p, status: newStatus, progress } : p))
+      );
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update project status in Supabase.");
+    } finally {
+      setMovingProjectId(null);
+    }
+  };
 
   const handleDelete = async () => {
     if (!deletingProject) return;
@@ -81,14 +128,6 @@ export default function ProjectsPage() {
     }
   };
 
-  const hasActiveFilters = query.trim() !== "" || statusFilter !== "ALL" || priorityFilter !== "ALL";
-
-  const clearFilters = () => {
-    setQuery("");
-    setStatusFilter("ALL");
-    setPriorityFilter("ALL");
-  };
-
   return (
     <ProtectedPage>
       <AppShell
@@ -98,7 +137,7 @@ export default function ProjectsPage() {
           <button
             type="button"
             onClick={() => setIsCreateOpen(true)}
-            className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 shadow-sm transition"
+            className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 shadow-sm transition"
           >
             <span>+</span>
             <span>Add Project</span>
@@ -107,7 +146,7 @@ export default function ProjectsPage() {
       >
         <div className="space-y-6">
           {/* Controls: Search and Filters */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="relative flex-1 max-w-md">
                 <input
@@ -130,33 +169,24 @@ export default function ProjectsPage() {
 
               <div className="flex flex-wrap items-center gap-2.5">
                 <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  <option value="ALL">All Statuses</option>
-                  <option value="Planning">Planning</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="On Hold">On Hold</option>
-                  <option value="Completed">Completed</option>
-                </select>
-
-                <select
                   value={priorityFilter}
                   onChange={(e) => setPriorityFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-slate-400"
                 >
                   <option value="ALL">All Priorities</option>
-                  <option value="High">High</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Low">Low</option>
+                  <option value="High">High Priority</option>
+                  <option value="Medium">Medium Priority</option>
+                  <option value="Low">Low Priority</option>
                 </select>
 
-                {hasActiveFilters && (
+                {(query || priorityFilter !== "ALL") && (
                   <button
                     type="button"
-                    onClick={clearFilters}
-                    className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 transition"
+                    onClick={() => {
+                      setQuery("");
+                      setPriorityFilter("ALL");
+                    }}
+                    className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
                   >
                     Clear Filters
                   </button>
@@ -165,93 +195,158 @@ export default function ProjectsPage() {
             </div>
           </div>
 
-          {/* Projects Grid */}
+          {/* PART 4: KANBAN BOARD VIEW */}
           {loading ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">
-              Loading projects...
+            <div className="rounded-2xl border border-slate-200 bg-white p-16 text-center text-sm text-slate-500 shadow-xs">
+              Loading Project Pipeline...
             </div>
-          ) : filteredProjects.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {filteredProjects.map((project) => (
-                <div
-                  key={String(project.id)}
-                  className="group flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-slate-300 hover:shadow-md transition"
-                >
-                  <div>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-xs uppercase font-semibold tracking-wider text-slate-400">
-                        {project.client}
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        <StatusBadge status={project.priority} />
-                        <StatusBadge status={project.status} />
-                      </div>
-                    </div>
-
-                    <h3
-                      onClick={() => setViewingProject(project)}
-                      className="mt-2 text-base font-semibold text-slate-900 group-hover:text-blue-600 transition cursor-pointer"
-                    >
-                      {project.name}
-                    </h3>
-
-                    <p className="mt-2 line-clamp-2 text-xs text-slate-500 leading-relaxed">
-                      {project.description || "No project description provided."}
-                    </p>
-                  </div>
-
-                  <div className="mt-5 border-t border-slate-100 pt-4">
-                    <div className="flex items-center justify-between text-xs text-slate-500">
-                      <div>
-                        Manager: <span className="font-medium text-slate-700">{project.manager}</span>
-                      </div>
-                      <div>
-                        Due: <span className="font-medium text-slate-700">{project.dueDate}</span>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between pt-3 border-t border-slate-50">
-                      <button
-                        type="button"
-                        onClick={() => setViewingProject(project)}
-                        className="text-xs font-semibold text-slate-700 hover:text-slate-900 hover:underline"
-                      >
-                        View Details →
-                      </button>
-
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setEditingProject(project)}
-                          className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeletingProject(project)}
-                          className="rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 transition"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
+          ) : filteredProjects.length === 0 ? (
             <EmptyState
-              title={hasActiveFilters ? "No matching projects" : "No projects found"}
+              title={query ? "No matching projects" : "No projects created"}
               description={
-                hasActiveFilters
+                query
                   ? "Try resetting your search query or adjusting your filters."
                   : "Start tracking deliverables and client milestones by creating your first project."
               }
-              actionLabel={hasActiveFilters ? "Clear Filters" : "+ Add Project"}
-              onAction={hasActiveFilters ? clearFilters : () => setIsCreateOpen(true)}
+              actionLabel="+ Add Project"
+              onAction={() => setIsCreateOpen(true)}
               icon="📁"
             />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-start">
+              {KANBAN_COLUMNS.map((col) => {
+                const colItems = columnProjects[col.id];
+
+                return (
+                  <div
+                    key={col.id}
+                    className="flex flex-col rounded-2xl border border-slate-200 bg-slate-50/70 p-3 shadow-xs min-h-[500px]"
+                  >
+                    {/* Column Header */}
+                    <div className="flex items-center justify-between px-2 py-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs uppercase tracking-wider text-slate-800">
+                          {col.title}
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${col.badgeBg}`}>
+                          {colItems.length}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Column Cards */}
+                    <div className="flex-1 space-y-3 overflow-y-auto max-h-[calc(100vh-280px)] pr-0.5">
+                      {colItems.map((project) => (
+                        <div
+                          key={String(project.id)}
+                          className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs hover:border-slate-300 hover:shadow-md transition space-y-3"
+                        >
+                          {/* Card Top: Client & Priority */}
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md truncate max-w-[140px]">
+                              {project.client}
+                            </span>
+                            <StatusBadge status={project.priority} />
+                          </div>
+
+                          {/* Card Title */}
+                          <h4
+                            onClick={() => setViewingProject(project)}
+                            className="text-sm font-bold text-slate-900 hover:text-blue-600 cursor-pointer transition line-clamp-2"
+                          >
+                            {project.name}
+                          </h4>
+
+                          {project.description && (
+                            <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                              {project.description}
+                            </p>
+                          )}
+
+                          {/* Progress Indicator */}
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-[11px] text-slate-500">
+                              <span>Progress</span>
+                              <span className="font-bold text-slate-700">{project.progress ?? 0}%</span>
+                            </div>
+                            <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-blue-600 transition-all duration-300"
+                                style={{ width: `${project.progress ?? 0}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Meta: Manager & Dates */}
+                          <div className="border-t border-slate-100 pt-2.5 space-y-1 text-[11px] text-slate-500">
+                            <div className="flex items-center justify-between">
+                              <span>Lead:</span>
+                              <span className="font-semibold text-slate-800">{project.manager}</span>
+                            </div>
+                            {project.dueDate && (
+                              <div className="flex items-center justify-between">
+                                <span>Due:</span>
+                                <span className="font-medium text-slate-700">{project.dueDate}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Interactive Status Movement & Actions */}
+                          <div className="border-t border-slate-100 pt-2.5 flex items-center justify-between gap-1">
+                            {/* Quick Status Mover */}
+                            <select
+                              value={project.status}
+                              disabled={movingProjectId === project.id}
+                              onChange={(e) => handleStatusChange(project.id, e.target.value as ProjectColumn)}
+                              className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400"
+                            >
+                              <option value="Planning">Move: Planning</option>
+                              <option value="In Progress">Move: In Progress</option>
+                              <option value="Review">Move: Review</option>
+                              <option value="Completed">Move: Completed</option>
+                            </select>
+
+                            {/* Card Menu Buttons */}
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setViewingProject(project)}
+                                title="View Details"
+                                className="rounded-lg p-1.5 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
+                              >
+                                👁️
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingProject(project)}
+                                title="Edit Project"
+                                className="rounded-lg p-1.5 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingProject(project)}
+                                title="Delete Project"
+                                className="rounded-lg p-1.5 text-xs text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      {colItems.length === 0 && (
+                        <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400 italic">
+                          No projects in {col.title}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
 
@@ -271,8 +366,8 @@ export default function ProjectsPage() {
           isOpen={Boolean(viewingProject)}
           onClose={() => setViewingProject(null)}
           project={viewingProject}
-          onEdit={(p) => setEditingProject(p)}
-          onDelete={(p) => setDeletingProject(p)}
+          onEdit={(proj) => setEditingProject(proj)}
+          onDelete={(proj) => setDeletingProject(proj)}
         />
 
         {/* Delete Confirmation Modal */}
@@ -281,7 +376,7 @@ export default function ProjectsPage() {
           onClose={() => setDeletingProject(null)}
           onConfirm={handleDelete}
           title="Delete Project"
-          message={`Are you sure you want to delete "${deletingProject?.name}"? All associated task associations will remain intact.`}
+          message={`Are you sure you want to delete project "${deletingProject?.name}"? All roadmap data will be removed.`}
           confirmLabel="Delete Project"
         />
       </AppShell>
