@@ -347,6 +347,7 @@ export const DataService = {
   },
 
   // ----------------------------------------------------------------------------
+  // ----------------------------------------------------------------------------
   // Clients RPC
   // ----------------------------------------------------------------------------
   async getClients(query?: string, status?: string): Promise<Client[]> {
@@ -374,6 +375,43 @@ export const DataService = {
       MEMORY_CACHE.clients = mapped;
       return mapped;
     }
+
+    // Resilient fallback: If RPC function not deployed yet, query live clients table
+    try {
+      let req = supabase.from("clients").select("*");
+      if (status && status !== "ALL") req = req.eq("status", status);
+      const { data: tableData, error: tableErr } = await req;
+      if (!tableErr && tableData && tableData.length > 0) {
+        let list = tableData;
+        if (query?.trim()) {
+          const q = query.trim().toLowerCase();
+          list = list.filter(
+            (c: any) =>
+              (c.name && c.name.toLowerCase().includes(q)) ||
+              (c.company && c.company.toLowerCase().includes(q)) ||
+              (c.email && c.email.toLowerCase().includes(q))
+          );
+        }
+        const mapped = list.map((c: any) => ({
+          id: String(c.id),
+          name: c.name || "",
+          company: c.company || "",
+          email: c.email || "",
+          phone: c.phone || "",
+          website: c.website || "",
+          industry: c.industry || "",
+          status: (c.status as any) || "Active",
+          value: c.value || "$25k",
+          notes: c.notes || "",
+          tenant_id: c.tenant_id,
+          createdAt: c.created_at,
+          created_at: c.created_at,
+        }));
+        MEMORY_CACHE.clients = mapped;
+        return mapped;
+      }
+    } catch (_) {}
+
     return MEMORY_CACHE.clients;
   },
 
@@ -390,28 +428,69 @@ export const DataService = {
       p_notes: client.notes?.trim() || null,
     });
 
-    if (!res.is_success || !res.data) {
-      throw new Error(res.message || "Failed to create client in Supabase");
+    if (res.is_success && res.data) {
+      const created: Client = {
+        id: String(res.data.id),
+        name: res.data.name,
+        company: res.data.company,
+        email: res.data.email,
+        phone: res.data.phone || "",
+        website: res.data.website || "",
+        industry: res.data.industry || "",
+        status: res.data.status,
+        value: res.data.value,
+        notes: res.data.notes || "",
+        tenant_id: res.data.tenant_id,
+        createdAt: res.data.created_at,
+      };
+
+      MEMORY_CACHE.clients = [created, ...MEMORY_CACHE.clients];
+      dispatchChange("clients");
+      return created;
     }
 
-    const created: Client = {
-      id: String(res.data.id),
-      name: res.data.name,
-      company: res.data.company,
-      email: res.data.email,
-      phone: res.data.phone || "",
-      website: res.data.website || "",
-      industry: res.data.industry || "",
-      status: res.data.status,
-      value: res.data.value,
-      notes: res.data.notes || "",
-      tenant_id: res.data.tenant_id,
-      createdAt: res.data.created_at,
-    };
+    // Resilient fallback: If RPC function not found in schema cache, insert directly into Supabase
+    if (res.status_code === 404) {
+      const { data: inserted, error: insertErr } = await supabase
+        .from("clients")
+        .insert({
+          name: client.name.trim(),
+          company: client.company.trim(),
+          email: client.email.trim(),
+          phone: client.phone?.trim() || "",
+          website: client.website?.trim() || "",
+          industry: client.industry?.trim() || "Technology",
+          status: client.status || "Active",
+          value: client.value || "$25k",
+          notes: client.notes?.trim() || "",
+        })
+        .select()
+        .single();
 
-    MEMORY_CACHE.clients = [created, ...MEMORY_CACHE.clients];
-    dispatchChange("clients");
-    return created;
+      if (insertErr) {
+        throw new Error(insertErr.message);
+      }
+
+      const created: Client = {
+        id: String(inserted.id),
+        name: inserted.name,
+        company: inserted.company,
+        email: inserted.email,
+        phone: inserted.phone || "",
+        website: inserted.website || "",
+        industry: inserted.industry || "",
+        status: inserted.status,
+        value: inserted.value,
+        notes: inserted.notes || "",
+        createdAt: inserted.created_at,
+      };
+
+      MEMORY_CACHE.clients = [created, ...MEMORY_CACHE.clients];
+      dispatchChange("clients");
+      return created;
+    }
+
+    throw new Error(res.message || "Failed to create client in Supabase");
   },
 
   async updateClient(id: string, updates: Partial<Client>): Promise<Client | null> {
@@ -428,37 +507,92 @@ export const DataService = {
       p_notes: updates.notes || null,
     });
 
-    if (!res.is_success || !res.data) {
-      throw new Error(res.message || "Failed to update client");
+    if (res.is_success && res.data) {
+      const updated: Client = {
+        id: String(res.data.id),
+        name: res.data.name,
+        company: res.data.company,
+        email: res.data.email,
+        phone: res.data.phone || "",
+        website: res.data.website || "",
+        industry: res.data.industry || "",
+        status: res.data.status,
+        value: res.data.value,
+        notes: res.data.notes || "",
+        createdAt: res.data.created_at,
+      };
+
+      MEMORY_CACHE.clients = MEMORY_CACHE.clients.map((c) => (c.id === id ? updated : c));
+      dispatchChange("clients");
+      return updated;
     }
 
-    const updated: Client = {
-      id: String(res.data.id),
-      name: res.data.name,
-      company: res.data.company,
-      email: res.data.email,
-      phone: res.data.phone || "",
-      website: res.data.website || "",
-      industry: res.data.industry || "",
-      status: res.data.status,
-      value: res.data.value,
-      notes: res.data.notes || "",
-      createdAt: res.data.created_at,
-    };
+    // Resilient fallback: If RPC function not found in schema cache, update directly in Supabase
+    if (res.status_code === 404) {
+      const dbUpdates: any = {};
+      if (updates.name) dbUpdates.name = updates.name;
+      if (updates.company) dbUpdates.company = updates.company;
+      if (updates.email) dbUpdates.email = updates.email;
+      if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+      if (updates.website !== undefined) dbUpdates.website = updates.website;
+      if (updates.industry !== undefined) dbUpdates.industry = updates.industry;
+      if (updates.status) dbUpdates.status = updates.status;
+      if (updates.value) dbUpdates.value = updates.value;
+      if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
 
-    MEMORY_CACHE.clients = MEMORY_CACHE.clients.map((c) => (c.id === id ? updated : c));
-    dispatchChange("clients");
-    return updated;
+      const { data: updatedRow, error: updateErr } = await supabase
+        .from("clients")
+        .update(dbUpdates)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (updateErr) {
+        throw new Error(updateErr.message);
+      }
+
+      const updated: Client = {
+        id: String(updatedRow.id),
+        name: updatedRow.name,
+        company: updatedRow.company,
+        email: updatedRow.email,
+        phone: updatedRow.phone || "",
+        website: updatedRow.website || "",
+        industry: updatedRow.industry || "",
+        status: updatedRow.status,
+        value: updatedRow.value,
+        notes: updatedRow.notes || "",
+        createdAt: updatedRow.created_at,
+      };
+
+      MEMORY_CACHE.clients = MEMORY_CACHE.clients.map((c) => (c.id === id ? updated : c));
+      dispatchChange("clients");
+      return updated;
+    }
+
+    throw new Error(res.message || "Failed to update client");
   },
 
   async deleteClient(id: string): Promise<boolean> {
     const res = await callRpc("fn_client_delete", { p_id: id });
-    if (!res.is_success) {
-      throw new Error(res.message || "Failed to delete client");
+    if (res.is_success) {
+      MEMORY_CACHE.clients = MEMORY_CACHE.clients.filter((c) => c.id !== id);
+      dispatchChange("clients");
+      return true;
     }
-    MEMORY_CACHE.clients = MEMORY_CACHE.clients.filter((c) => c.id !== id);
-    dispatchChange("clients");
-    return true;
+
+    // Resilient fallback: If RPC function not found in schema cache, delete directly in Supabase
+    if (res.status_code === 404) {
+      const { error: delErr } = await supabase.from("clients").delete().eq("id", id);
+      if (delErr) {
+        throw new Error(delErr.message);
+      }
+      MEMORY_CACHE.clients = MEMORY_CACHE.clients.filter((c) => c.id !== id);
+      dispatchChange("clients");
+      return true;
+    }
+
+    throw new Error(res.message || "Failed to delete client");
   },
 
   // ----------------------------------------------------------------------------
@@ -496,6 +630,49 @@ export const DataService = {
       MEMORY_CACHE.projects = mapped;
       return mapped;
     }
+
+    // Resilient fallback: If RPC function not deployed yet, query live projects table
+    try {
+      let req = supabase.from("projects").select("*");
+      if (status && status !== "ALL") req = req.eq("status", status);
+      if (priority && priority !== "ALL") req = req.eq("priority", priority);
+      const { data: tableData, error: tableErr } = await req;
+      if (!tableErr && tableData && tableData.length > 0) {
+        let list = tableData;
+        if (query?.trim()) {
+          const q = query.trim().toLowerCase();
+          list = list.filter(
+            (p: any) =>
+              (p.name && p.name.toLowerCase().includes(q)) ||
+              (p.description && p.description.toLowerCase().includes(q))
+          );
+        }
+        const mapped: Project[] = list.map((p: any) => ({
+          id: String(p.id),
+          name: p.name || "",
+          client_id: p.client_id ? String(p.client_id) : undefined,
+          client: p.client || "Internal Project",
+          description: p.description || "",
+          manager: p.manager || p.project_manager || "Unassigned",
+          project_manager: p.project_manager,
+          assignedTeam: p.assignedTeam || p.assigned_team || "Team",
+          assigned_team: p.assigned_team,
+          startDate: p.startDate || p.start_date || "",
+          start_date: p.start_date,
+          dueDate: p.dueDate || p.due_date || "",
+          due_date: p.due_date,
+          priority: p.priority || "Medium",
+          status: p.status || "Planning",
+          progress: p.progress ?? 0,
+          tenant_id: p.tenant_id,
+          createdAt: p.created_at,
+          created_at: p.created_at,
+        }));
+        MEMORY_CACHE.projects = mapped;
+        return mapped;
+      }
+    } catch (_) {}
+
     return MEMORY_CACHE.projects;
   },
 
@@ -513,29 +690,73 @@ export const DataService = {
       p_progress: project.progress || 0,
     });
 
-    if (!res.is_success || !res.data) {
-      throw new Error(res.message || "Failed to create project in Supabase");
+    if (res.is_success && res.data) {
+      const created: Project = {
+        id: String(res.data.id),
+        name: res.data.name,
+        client_id: res.data.client_id ? String(res.data.client_id) : undefined,
+        client: res.data.client || "Internal Project",
+        description: res.data.description || "",
+        manager: res.data.manager || "Unassigned",
+        assignedTeam: res.data.assignedTeam || "Team",
+        startDate: res.data.startDate || "",
+        dueDate: res.data.dueDate || "",
+        priority: res.data.priority,
+        status: res.data.status,
+        progress: res.data.progress ?? 0,
+        createdAt: res.data.created_at,
+      };
+
+      MEMORY_CACHE.projects = [created, ...MEMORY_CACHE.projects];
+      dispatchChange("projects");
+      return created;
     }
 
-    const created: Project = {
-      id: String(res.data.id),
-      name: res.data.name,
-      client_id: res.data.client_id ? String(res.data.client_id) : undefined,
-      client: res.data.client || "Internal Project",
-      description: res.data.description || "",
-      manager: res.data.manager || "Unassigned",
-      assignedTeam: res.data.assignedTeam || "Team",
-      startDate: res.data.startDate || "",
-      dueDate: res.data.dueDate || "",
-      priority: res.data.priority,
-      status: res.data.status,
-      progress: res.data.progress ?? 0,
-      createdAt: res.data.created_at,
-    };
+    // Resilient fallback: If RPC function not found in schema cache, insert directly into Supabase
+    if (res.status_code === 404) {
+      const { data: inserted, error: insertErr } = await supabase
+        .from("projects")
+        .insert({
+          name: project.name.trim(),
+          client_id: project.client_id || null,
+          description: project.description?.trim() || "",
+          project_manager: project.manager || project.project_manager || "Unassigned",
+          assigned_team: project.assignedTeam || project.assigned_team || "Team",
+          start_date: project.startDate || project.start_date || null,
+          due_date: project.dueDate || project.due_date || null,
+          priority: project.priority || "Medium",
+          status: project.status || "Planning",
+          progress: project.progress || 0,
+        })
+        .select()
+        .single();
 
-    MEMORY_CACHE.projects = [created, ...MEMORY_CACHE.projects];
-    dispatchChange("projects");
-    return created;
+      if (insertErr) {
+        throw new Error(insertErr.message);
+      }
+
+      const created: Project = {
+        id: String(inserted.id),
+        name: inserted.name,
+        client_id: inserted.client_id ? String(inserted.client_id) : undefined,
+        client: project.client || "Internal Project",
+        description: inserted.description || "",
+        manager: inserted.project_manager || "Unassigned",
+        assignedTeam: inserted.assigned_team || "Team",
+        startDate: inserted.start_date || "",
+        dueDate: inserted.due_date || "",
+        priority: inserted.priority,
+        status: inserted.status,
+        progress: inserted.progress ?? 0,
+        createdAt: inserted.created_at,
+      };
+
+      MEMORY_CACHE.projects = [created, ...MEMORY_CACHE.projects];
+      dispatchChange("projects");
+      return created;
+    }
+
+    throw new Error(res.message || "Failed to create project in Supabase");
   },
 
   async updateProject(id: string, updates: Partial<Project>): Promise<Project | null> {
@@ -553,29 +774,79 @@ export const DataService = {
       p_progress: updates.progress ?? null,
     });
 
-    if (!res.is_success || !res.data) {
-      throw new Error(res.message || "Failed to update project");
+    if (res.is_success && res.data) {
+      const updated: Project = {
+        id: String(res.data.id),
+        name: res.data.name,
+        client_id: res.data.client_id ? String(res.data.client_id) : undefined,
+        client: res.data.client || "Internal Project",
+        description: res.data.description || "",
+        manager: res.data.manager || "Unassigned",
+        assignedTeam: res.data.assignedTeam || "Team",
+        startDate: res.data.startDate || "",
+        dueDate: res.data.dueDate || "",
+        priority: res.data.priority,
+        status: res.data.status,
+        progress: res.data.progress ?? 0,
+        createdAt: res.data.created_at,
+      };
+
+      MEMORY_CACHE.projects = MEMORY_CACHE.projects.map((p) => (p.id === id ? updated : p));
+      dispatchChange("projects");
+      return updated;
     }
 
-    const updated: Project = {
-      id: String(res.data.id),
-      name: res.data.name,
-      client_id: res.data.client_id ? String(res.data.client_id) : undefined,
-      client: res.data.client || "Internal Project",
-      description: res.data.description || "",
-      manager: res.data.manager || "Unassigned",
-      assignedTeam: res.data.assignedTeam || "Team",
-      startDate: res.data.startDate || "",
-      dueDate: res.data.dueDate || "",
-      priority: res.data.priority,
-      status: res.data.status,
-      progress: res.data.progress ?? 0,
-      createdAt: res.data.created_at,
-    };
+    // Resilient fallback: If RPC function not found in schema cache, update directly in Supabase
+    if (res.status_code === 404) {
+      const dbUpdates: any = {};
+      if (updates.name) dbUpdates.name = updates.name;
+      if (updates.client_id !== undefined) dbUpdates.client_id = updates.client_id;
+      if (updates.description !== undefined) dbUpdates.description = updates.description;
+      if (updates.manager || updates.project_manager)
+        dbUpdates.project_manager = updates.manager || updates.project_manager;
+      if (updates.assignedTeam || updates.assigned_team)
+        dbUpdates.assigned_team = updates.assignedTeam || updates.assigned_team;
+      if (updates.startDate || updates.start_date)
+        dbUpdates.start_date = updates.startDate || updates.start_date;
+      if (updates.dueDate || updates.due_date)
+        dbUpdates.due_date = updates.dueDate || updates.due_date;
+      if (updates.priority) dbUpdates.priority = updates.priority;
+      if (updates.status) dbUpdates.status = updates.status;
+      if (updates.progress !== undefined) dbUpdates.progress = updates.progress;
 
-    MEMORY_CACHE.projects = MEMORY_CACHE.projects.map((p) => (p.id === id ? updated : p));
-    dispatchChange("projects");
-    return updated;
+      const { data: updatedRow, error: updateErr } = await supabase
+        .from("projects")
+        .update(dbUpdates)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (updateErr) {
+        throw new Error(updateErr.message);
+      }
+
+      const updated: Project = {
+        id: String(updatedRow.id),
+        name: updatedRow.name,
+        client_id: updatedRow.client_id ? String(updatedRow.client_id) : undefined,
+        client: updates.client || "Internal Project",
+        description: updatedRow.description || "",
+        manager: updatedRow.project_manager || "Unassigned",
+        assignedTeam: updatedRow.assigned_team || "Team",
+        startDate: updatedRow.start_date || "",
+        dueDate: updatedRow.due_date || "",
+        priority: updatedRow.priority,
+        status: updatedRow.status,
+        progress: updatedRow.progress ?? 0,
+        createdAt: updatedRow.created_at,
+      };
+
+      MEMORY_CACHE.projects = MEMORY_CACHE.projects.map((p) => (p.id === id ? updated : p));
+      dispatchChange("projects");
+      return updated;
+    }
+
+    throw new Error(res.message || "Failed to update project");
   },
 
   /**
@@ -592,25 +863,54 @@ export const DataService = {
       p_progress: progress ?? null,
     });
 
-    if (!res.is_success) {
-      throw new Error(res.message || "Failed to update project status");
+    if (res.is_success) {
+      MEMORY_CACHE.projects = MEMORY_CACHE.projects.map((p) =>
+        p.id === id ? { ...p, status, progress: progress ?? p.progress } : p
+      );
+      dispatchChange("projects");
+      return true;
     }
 
-    MEMORY_CACHE.projects = MEMORY_CACHE.projects.map((p) =>
-      p.id === id ? { ...p, status, progress: progress ?? p.progress } : p
-    );
-    dispatchChange("projects");
-    return true;
+    // Resilient fallback: If RPC function not found in schema cache, update status directly in Supabase
+    if (res.status_code === 404) {
+      const dbUpdates: any = { status };
+      if (progress !== undefined) dbUpdates.progress = progress;
+
+      const { error: updateErr } = await supabase.from("projects").update(dbUpdates).eq("id", id);
+      if (updateErr) {
+        throw new Error(updateErr.message);
+      }
+
+      MEMORY_CACHE.projects = MEMORY_CACHE.projects.map((p) =>
+        p.id === id ? { ...p, status, progress: progress ?? p.progress } : p
+      );
+      dispatchChange("projects");
+      return true;
+    }
+
+    throw new Error(res.message || "Failed to update project status");
   },
 
   async deleteProject(id: string): Promise<boolean> {
     const res = await callRpc("fn_project_delete", { p_id: id });
-    if (!res.is_success) {
-      throw new Error(res.message || "Failed to delete project");
+    if (res.is_success) {
+      MEMORY_CACHE.projects = MEMORY_CACHE.projects.filter((p) => p.id !== id);
+      dispatchChange("projects");
+      return true;
     }
-    MEMORY_CACHE.projects = MEMORY_CACHE.projects.filter((p) => p.id !== id);
-    dispatchChange("projects");
-    return true;
+
+    // Resilient fallback: If RPC function not found in schema cache, delete directly in Supabase
+    if (res.status_code === 404) {
+      const { error: delErr } = await supabase.from("projects").delete().eq("id", id);
+      if (delErr) {
+        throw new Error(delErr.message);
+      }
+      MEMORY_CACHE.projects = MEMORY_CACHE.projects.filter((p) => p.id !== id);
+      dispatchChange("projects");
+      return true;
+    }
+
+    throw new Error(res.message || "Failed to delete project");
   },
 
   // ----------------------------------------------------------------------------
@@ -643,6 +943,44 @@ export const DataService = {
       MEMORY_CACHE.tasks = mapped;
       return mapped;
     }
+
+    // Resilient fallback: If RPC function not deployed yet, query live tasks table
+    try {
+      let req = supabase.from("tasks").select("*");
+      if (status && status !== "ALL") req = req.eq("status", status);
+      if (priority && priority !== "ALL") req = req.eq("priority", priority);
+      const { data: tableData, error: tableErr } = await req;
+      if (!tableErr && tableData && tableData.length > 0) {
+        let list = tableData;
+        if (query?.trim()) {
+          const q = query.trim().toLowerCase();
+          list = list.filter(
+            (t: any) =>
+              (t.title && t.title.toLowerCase().includes(q)) ||
+              (t.description && t.description.toLowerCase().includes(q))
+          );
+        }
+        const mapped: Task[] = list.map((t: any) => ({
+          id: String(t.id),
+          title: t.title || "",
+          description: t.description || "",
+          client_id: t.client_id ? String(t.client_id) : undefined,
+          client: t.client || "Internal Task",
+          assignee: t.assignee || t.assigned_employee || "Unassigned",
+          assigned_employee: t.assigned_employee,
+          priority: t.priority || "Medium",
+          status: t.status || "To Do",
+          dueDate: t.dueDate || t.due_date || "",
+          due_date: t.due_date,
+          tenant_id: t.tenant_id,
+          createdAt: t.created_at,
+          created_at: t.created_at,
+        }));
+        MEMORY_CACHE.tasks = mapped;
+        return mapped;
+      }
+    } catch (_) {}
+
     return MEMORY_CACHE.tasks;
   },
 
@@ -657,26 +995,64 @@ export const DataService = {
       p_due_date: task.dueDate || task.due_date || null,
     });
 
-    if (!res.is_success || !res.data) {
-      throw new Error(res.message || "Failed to create task in Supabase");
+    if (res.is_success && res.data) {
+      const created: Task = {
+        id: String(res.data.id),
+        title: res.data.title,
+        client_id: res.data.client_id ? String(res.data.client_id) : undefined,
+        client: "Internal Task",
+        description: res.data.description || "",
+        assignee: res.data.assignee || "Unassigned",
+        priority: res.data.priority,
+        status: res.data.status,
+        dueDate: res.data.dueDate || "",
+        createdAt: res.data.created_at,
+      };
+
+      MEMORY_CACHE.tasks = [created, ...MEMORY_CACHE.tasks];
+      dispatchChange("tasks");
+      return created;
     }
 
-    const created: Task = {
-      id: String(res.data.id),
-      title: res.data.title,
-      client_id: res.data.client_id ? String(res.data.client_id) : undefined,
-      client: "Internal Task",
-      description: res.data.description || "",
-      assignee: res.data.assignee || "Unassigned",
-      priority: res.data.priority,
-      status: res.data.status,
-      dueDate: res.data.dueDate || "",
-      createdAt: res.data.created_at,
-    };
+    // Resilient fallback: If RPC function not found in schema cache, insert directly into Supabase
+    if (res.status_code === 404) {
+      const { data: inserted, error: insertErr } = await supabase
+        .from("tasks")
+        .insert({
+          title: task.title.trim(),
+          client_id: task.client_id || null,
+          description: task.description?.trim() || "",
+          assigned_employee: task.assignee || task.assigned_employee || "Unassigned",
+          priority: task.priority || "Medium",
+          status: task.status || "To Do",
+          due_date: task.dueDate || task.due_date || null,
+        })
+        .select()
+        .single();
 
-    MEMORY_CACHE.tasks = [created, ...MEMORY_CACHE.tasks];
-    dispatchChange("tasks");
-    return created;
+      if (insertErr) {
+        throw new Error(insertErr.message);
+      }
+
+      const created: Task = {
+        id: String(inserted.id),
+        title: inserted.title,
+        client_id: inserted.client_id ? String(inserted.client_id) : undefined,
+        client: task.client || "Internal Task",
+        description: inserted.description || "",
+        assignee: inserted.assigned_employee || "Unassigned",
+        priority: inserted.priority,
+        status: inserted.status,
+        dueDate: inserted.due_date || "",
+        createdAt: inserted.created_at,
+      };
+
+      MEMORY_CACHE.tasks = [created, ...MEMORY_CACHE.tasks];
+      dispatchChange("tasks");
+      return created;
+    }
+
+    throw new Error(res.message || "Failed to create task in Supabase");
   },
 
   async updateTask(id: string, updates: Partial<Task>): Promise<Task | null> {
@@ -691,36 +1067,89 @@ export const DataService = {
       p_due_date: updates.dueDate || updates.due_date || null,
     });
 
-    if (!res.is_success || !res.data) {
-      throw new Error(res.message || "Failed to update task");
+    if (res.is_success && res.data) {
+      const updated: Task = {
+        id: String(res.data.id),
+        title: res.data.title,
+        client_id: res.data.client_id ? String(res.data.client_id) : undefined,
+        client: "Internal Task",
+        description: res.data.description || "",
+        assignee: res.data.assignee || "Unassigned",
+        priority: res.data.priority,
+        status: res.data.status,
+        dueDate: res.data.dueDate || "",
+        createdAt: res.data.created_at,
+      };
+
+      MEMORY_CACHE.tasks = MEMORY_CACHE.tasks.map((t) => (t.id === id ? updated : t));
+      dispatchChange("tasks");
+      return updated;
     }
 
-    const updated: Task = {
-      id: String(res.data.id),
-      title: res.data.title,
-      client_id: res.data.client_id ? String(res.data.client_id) : undefined,
-      client: "Internal Task",
-      description: res.data.description || "",
-      assignee: res.data.assignee || "Unassigned",
-      priority: res.data.priority,
-      status: res.data.status,
-      dueDate: res.data.dueDate || "",
-      createdAt: res.data.created_at,
-    };
+    // Resilient fallback: If RPC function not found in schema cache, update directly in Supabase
+    if (res.status_code === 404) {
+      const dbUpdates: any = {};
+      if (updates.title) dbUpdates.title = updates.title;
+      if (updates.client_id !== undefined) dbUpdates.client_id = updates.client_id;
+      if (updates.description !== undefined) dbUpdates.description = updates.description;
+      if (updates.assignee || updates.assigned_employee)
+        dbUpdates.assigned_employee = updates.assignee || updates.assigned_employee;
+      if (updates.priority) dbUpdates.priority = updates.priority;
+      if (updates.status) dbUpdates.status = updates.status;
+      if (updates.dueDate || updates.due_date) dbUpdates.due_date = updates.dueDate || updates.due_date;
 
-    MEMORY_CACHE.tasks = MEMORY_CACHE.tasks.map((t) => (t.id === id ? updated : t));
-    dispatchChange("tasks");
-    return updated;
+      const { data: updatedRow, error: updateErr } = await supabase
+        .from("tasks")
+        .update(dbUpdates)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (updateErr) {
+        throw new Error(updateErr.message);
+      }
+
+      const updated: Task = {
+        id: String(updatedRow.id),
+        title: updatedRow.title,
+        client_id: updatedRow.client_id ? String(updatedRow.client_id) : undefined,
+        client: updates.client || "Internal Task",
+        description: updatedRow.description || "",
+        assignee: updatedRow.assigned_employee || "Unassigned",
+        priority: updatedRow.priority,
+        status: updatedRow.status,
+        dueDate: updatedRow.due_date || "",
+        createdAt: updatedRow.created_at,
+      };
+
+      MEMORY_CACHE.tasks = MEMORY_CACHE.tasks.map((t) => (t.id === id ? updated : t));
+      dispatchChange("tasks");
+      return updated;
+    }
+
+    throw new Error(res.message || "Failed to update task");
   },
 
   async deleteTask(id: string): Promise<boolean> {
     const res = await callRpc("fn_task_delete", { p_id: id });
-    if (!res.is_success) {
-      throw new Error(res.message || "Failed to delete task");
+    if (res.is_success) {
+      MEMORY_CACHE.tasks = MEMORY_CACHE.tasks.filter((t) => t.id !== id);
+      dispatchChange("tasks");
+      return true;
     }
-    MEMORY_CACHE.tasks = MEMORY_CACHE.tasks.filter((t) => t.id !== id);
-    dispatchChange("tasks");
-    return true;
+
+    // Resilient fallback: If RPC function not found in schema cache, delete directly in Supabase
+    if (res.status_code === 404) {
+      const { error: delErr } = await supabase.from("tasks").delete().eq("id", id);
+      if (delErr) {
+        throw new Error(delErr.message);
+      }
+      MEMORY_CACHE.tasks = MEMORY_CACHE.tasks.filter((t) => t.id !== id);
+      dispatchChange("tasks");
+      return true;
+    }
+
+    throw new Error(res.message || "Failed to delete task");
   },
 
   // ----------------------------------------------------------------------------
@@ -750,6 +1179,42 @@ export const DataService = {
       MEMORY_CACHE.team = mapped;
       return mapped;
     }
+
+    // Resilient fallback: If RPC function not deployed yet, query live profiles table
+    try {
+      let req = supabase.from("profiles").select("*");
+      if (department && department !== "ALL") req = req.eq("department", department);
+      if (status && status !== "ALL") req = req.eq("status", status);
+      const { data: tableData, error: tableErr } = await req;
+      if (!tableErr && tableData && tableData.length > 0) {
+        let list = tableData;
+        if (query?.trim()) {
+          const q = query.trim().toLowerCase();
+          list = list.filter(
+            (u: any) =>
+              (u.full_name && u.full_name.toLowerCase().includes(q)) ||
+              (u.email && u.email.toLowerCase().includes(q)) ||
+              (u.role && u.role.toLowerCase().includes(q))
+          );
+        }
+        const mapped: Employee[] = list.map((u: any) => ({
+          id: String(u.id),
+          name: u.full_name || u.name || u.email,
+          full_name: u.full_name,
+          email: u.email,
+          role: u.role || "Employee",
+          department: u.department || "General",
+          phone: u.phone || "",
+          status: (u.status as any) || "Active",
+          tenant_id: u.tenant_id,
+          createdAt: u.created_at,
+          created_at: u.created_at,
+        }));
+        MEMORY_CACHE.team = mapped;
+        return mapped;
+      }
+    } catch (_) {}
+
     return MEMORY_CACHE.team;
   },
 
@@ -764,33 +1229,78 @@ export const DataService = {
       p_password: user.password || null,
     });
 
-    if (!res.is_success || !res.data) {
-      throw new Error(res.message || "Failed to create user in Supabase");
+    if (res.is_success && res.data) {
+      if (user.password) {
+        saveUserCredential(
+          user.email,
+          user.password,
+          user.name,
+          user.role.toLowerCase().includes("admin") ? "admin" : "employee"
+        );
+      }
+
+      const created: Employee = {
+        id: String(res.data.id),
+        name: res.data.name || res.data.full_name,
+        email: res.data.email,
+        role: res.data.role,
+        department: res.data.department,
+        phone: res.data.phone || "",
+        status: res.data.status,
+        createdAt: res.data.created_at,
+      };
+
+      MEMORY_CACHE.team = [created, ...MEMORY_CACHE.team];
+      dispatchChange("profiles");
+      return created;
     }
 
-    if (user.password) {
-      saveUserCredential(
-        user.email,
-        user.password,
-        user.name,
-        user.role.toLowerCase().includes("admin") ? "admin" : "employee"
-      );
+    // Resilient fallback: If RPC function not found in schema cache, insert directly into Supabase
+    if (res.status_code === 404) {
+      const { data: inserted, error: insertErr } = await supabase
+        .from("profiles")
+        .insert({
+          full_name: user.name.trim(),
+          email: user.email.trim().toLowerCase(),
+          role: user.role.trim(),
+          department: user.department || "General",
+          phone: user.phone || "",
+          status: user.status || "Active",
+          password: user.password || null,
+        })
+        .select()
+        .single();
+
+      if (insertErr) {
+        throw new Error(insertErr.message);
+      }
+
+      if (user.password) {
+        saveUserCredential(
+          user.email,
+          user.password,
+          user.name,
+          user.role.toLowerCase().includes("admin") ? "admin" : "employee"
+        );
+      }
+
+      const created: Employee = {
+        id: String(inserted.id),
+        name: inserted.full_name,
+        email: inserted.email,
+        role: inserted.role,
+        department: inserted.department,
+        phone: inserted.phone || "",
+        status: inserted.status,
+        createdAt: inserted.created_at,
+      };
+
+      MEMORY_CACHE.team = [created, ...MEMORY_CACHE.team];
+      dispatchChange("profiles");
+      return created;
     }
 
-    const created: Employee = {
-      id: String(res.data.id),
-      name: res.data.name,
-      email: res.data.email,
-      role: res.data.role,
-      department: res.data.department,
-      phone: res.data.phone || "",
-      status: res.data.status,
-      createdAt: res.data.created_at,
-    };
-
-    MEMORY_CACHE.team = [created, ...MEMORY_CACHE.team];
-    dispatchChange("profiles");
-    return created;
+    throw new Error(res.message || "Failed to create user in Supabase");
   },
 
   async updateUser(id: string, updates: Partial<Employee>): Promise<Employee | null> {
@@ -806,44 +1316,103 @@ export const DataService = {
       p_password: updates.password || null,
     });
 
-    if (!res.is_success || !res.data) {
-      throw new Error(res.message || "Failed to update user");
+    if (res.is_success && res.data) {
+      if (updates.email && updates.password) {
+        saveUserCredential(
+          updates.email,
+          updates.password,
+          updates.name,
+          updates.role?.toLowerCase().includes("admin") ? "admin" : "employee"
+        );
+      }
+
+      const updated: Employee = {
+        id: String(res.data.id),
+        name: res.data.name || res.data.full_name,
+        email: res.data.email,
+        role: res.data.role,
+        department: res.data.department,
+        phone: res.data.phone || "",
+        status: res.data.status,
+        createdAt: res.data.updated_at,
+      };
+
+      MEMORY_CACHE.team = MEMORY_CACHE.team.map((e) => (e.id === id ? updated : e));
+      dispatchChange("profiles");
+      return updated;
     }
 
-    if (updates.email && updates.password) {
-      saveUserCredential(
-        updates.email,
-        updates.password,
-        updates.name,
-        updates.role?.toLowerCase().includes("admin") ? "admin" : "employee"
-      );
+    // Resilient fallback: If RPC function not found in schema cache, update directly in Supabase
+    if (res.status_code === 404) {
+      const dbUpdates: any = {};
+      if (updates.name) dbUpdates.full_name = updates.name;
+      if (updates.email) dbUpdates.email = updates.email;
+      if (updates.role) dbUpdates.role = updates.role;
+      if (updates.department) dbUpdates.department = updates.department;
+      if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+      if (updates.status) dbUpdates.status = updates.status;
+      if (updates.password) dbUpdates.password = updates.password;
+
+      const { data: updatedRow, error: updateErr } = await supabase
+        .from("profiles")
+        .update(dbUpdates)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (updateErr) {
+        throw new Error(updateErr.message);
+      }
+
+      if (updates.email && updates.password) {
+        saveUserCredential(
+          updates.email,
+          updates.password,
+          updates.name,
+          updates.role?.toLowerCase().includes("admin") ? "admin" : "employee"
+        );
+      }
+
+      const updated: Employee = {
+        id: String(updatedRow.id),
+        name: updatedRow.full_name,
+        email: updatedRow.email,
+        role: updatedRow.role,
+        department: updatedRow.department,
+        phone: updatedRow.phone || "",
+        status: updatedRow.status,
+        createdAt: updatedRow.created_at,
+      };
+
+      MEMORY_CACHE.team = MEMORY_CACHE.team.map((e) => (e.id === id ? updated : e));
+      dispatchChange("profiles");
+      return updated;
     }
 
-    const updated: Employee = {
-      id: String(res.data.id),
-      name: res.data.name,
-      email: res.data.email,
-      role: res.data.role,
-      department: res.data.department,
-      phone: res.data.phone || "",
-      status: res.data.status,
-      createdAt: res.data.updated_at,
-    };
-
-    MEMORY_CACHE.team = MEMORY_CACHE.team.map((e) => (e.id === id ? updated : e));
-    dispatchChange("profiles");
-    return updated;
+    throw new Error(res.message || "Failed to update user");
   },
 
   async deleteUser(id: string): Promise<boolean> {
     const intId = parseInt(id, 10);
     const res = await callRpc("fn_team_delete", { p_id: isNaN(intId) ? 1 : intId });
-    if (!res.is_success) {
-      throw new Error(res.message || "Failed to delete user");
+    if (res.is_success) {
+      MEMORY_CACHE.team = MEMORY_CACHE.team.filter((e) => e.id !== id);
+      dispatchChange("profiles");
+      return true;
     }
-    MEMORY_CACHE.team = MEMORY_CACHE.team.filter((e) => e.id !== id);
-    dispatchChange("profiles");
-    return true;
+
+    // Resilient fallback: If RPC function not found in schema cache, delete directly in Supabase
+    if (res.status_code === 404) {
+      const { error: deleteErr } = await supabase.from("profiles").delete().eq("id", id);
+      if (deleteErr) {
+        throw new Error(deleteErr.message);
+      }
+      MEMORY_CACHE.team = MEMORY_CACHE.team.filter((e) => e.id !== id);
+      dispatchChange("profiles");
+      return true;
+    }
+
+    throw new Error(res.message || "Failed to delete user");
   },
 
   // ----------------------------------------------------------------------------
@@ -876,6 +1445,47 @@ export const DataService = {
       MEMORY_CACHE.content = mapped;
       return mapped;
     }
+
+    // Resilient fallback: If RPC function not deployed yet, query live content table
+    try {
+      let req = supabase.from("content").select("*");
+      if (priority && priority !== "ALL") req = req.eq("priority", priority);
+      const { data: tableData, error: tableErr } = await req;
+      if (!tableErr && tableData && tableData.length > 0) {
+        let list = tableData;
+        if (query?.trim()) {
+          const q = query.trim().toLowerCase();
+          list = list.filter(
+            (c: any) =>
+              (c.title && c.title.toLowerCase().includes(q)) ||
+              (c.description && c.description.toLowerCase().includes(q))
+          );
+        }
+        if (stage && stage !== "ALL") {
+          const dbSt = stageToDb(stage as any);
+          list = list.filter((c: any) => c.stage === dbSt || c.status === stage);
+        }
+        const mapped: ContentItem[] = list.map((c: any) => ({
+          id: String(c.id),
+          client_id: c.client_id ? String(c.client_id) : undefined,
+          client: c.client || "Internal",
+          title: c.title || "",
+          contentType: c.content_type || c.contentType || "Post",
+          platform: c.platform || "LinkedIn",
+          description: c.description || "",
+          assignee: c.assigned_employee || c.assignee || "Unassigned",
+          priority: c.priority || "Medium",
+          dueDate: c.due_date || c.dueDate || "",
+          status: stageFromDb(c.stage || c.status),
+          stage: c.stage,
+          tenant_id: c.tenant_id,
+          createdAt: c.created_at,
+        }));
+        MEMORY_CACHE.content = mapped;
+        return mapped;
+      }
+    } catch (_) {}
+
     return MEMORY_CACHE.content;
   },
 
@@ -892,28 +1502,70 @@ export const DataService = {
       p_stage: stageToDb(item.status),
     });
 
-    if (!res.is_success || !res.data) {
-      throw new Error(res.message || "Failed to create content item");
+    if (res.is_success && res.data) {
+      const created: ContentItem = {
+        id: String(res.data.id),
+        title: res.data.title,
+        client_id: res.data.client_id ? String(res.data.client_id) : undefined,
+        client: "Internal",
+        contentType: res.data.contentType || "Post",
+        platform: res.data.platform || "LinkedIn",
+        description: res.data.description || "",
+        assignee: res.data.assignee || "Unassigned",
+        priority: res.data.priority,
+        dueDate: res.data.dueDate || "",
+        status: stageFromDb(res.data.status),
+        createdAt: res.data.created_at,
+      };
+
+      MEMORY_CACHE.content = [created, ...MEMORY_CACHE.content];
+      dispatchChange("content");
+      return created;
     }
 
-    const created: ContentItem = {
-      id: String(res.data.id),
-      title: res.data.title,
-      client_id: res.data.client_id ? String(res.data.client_id) : undefined,
-      client: "Internal",
-      contentType: res.data.contentType || "Post",
-      platform: res.data.platform || "LinkedIn",
-      description: res.data.description || "",
-      assignee: res.data.assignee || "Unassigned",
-      priority: res.data.priority,
-      dueDate: res.data.dueDate || "",
-      status: stageFromDb(res.data.status),
-      createdAt: res.data.created_at,
-    };
+    // Resilient fallback: If RPC function not found in schema cache, insert directly into Supabase
+    if (res.status_code === 404) {
+      const { data: inserted, error: insertErr } = await supabase
+        .from("content")
+        .insert({
+          title: item.title.trim(),
+          client_id: item.client_id || null,
+          content_type: item.contentType || "Post",
+          platform: item.platform || "LinkedIn",
+          description: item.description?.trim() || "",
+          assigned_employee: item.assignee || "Unassigned",
+          priority: item.priority || "Medium",
+          due_date: item.dueDate || null,
+          stage: stageToDb(item.status),
+        })
+        .select()
+        .single();
 
-    MEMORY_CACHE.content = [created, ...MEMORY_CACHE.content];
-    dispatchChange("content");
-    return created;
+      if (insertErr) {
+        throw new Error(insertErr.message);
+      }
+
+      const created: ContentItem = {
+        id: String(inserted.id),
+        title: inserted.title,
+        client_id: inserted.client_id ? String(inserted.client_id) : undefined,
+        client: "Internal",
+        contentType: inserted.content_type || "Post",
+        platform: inserted.platform || "LinkedIn",
+        description: inserted.description || "",
+        assignee: inserted.assigned_employee || "Unassigned",
+        priority: inserted.priority,
+        dueDate: inserted.due_date || "",
+        status: stageFromDb(inserted.stage),
+        createdAt: inserted.created_at,
+      };
+
+      MEMORY_CACHE.content = [created, ...MEMORY_CACHE.content];
+      dispatchChange("content");
+      return created;
+    }
+
+    throw new Error(res.message || "Failed to create content item");
   },
 
   async updateContentItem(id: string, updates: Partial<ContentItem>): Promise<ContentItem | null> {
@@ -930,38 +1582,94 @@ export const DataService = {
       p_stage: updates.status ? stageToDb(updates.status) : null,
     });
 
-    if (!res.is_success || !res.data) {
-      throw new Error(res.message || "Failed to update content item");
+    if (res.is_success && res.data) {
+      const updated: ContentItem = {
+        id: String(res.data.id),
+        title: res.data.title,
+        client_id: res.data.client_id ? String(res.data.client_id) : undefined,
+        client: "Internal",
+        contentType: res.data.contentType || "Post",
+        platform: res.data.platform || "LinkedIn",
+        description: res.data.description || "",
+        assignee: res.data.assignee || "Unassigned",
+        priority: res.data.priority,
+        dueDate: res.data.dueDate || "",
+        status: stageFromDb(res.data.status),
+        createdAt: res.data.updated_at,
+      };
+
+      MEMORY_CACHE.content = MEMORY_CACHE.content.map((c) => (c.id === id ? updated : c));
+      dispatchChange("content");
+      return updated;
     }
 
-    const updated: ContentItem = {
-      id: String(res.data.id),
-      title: res.data.title,
-      client_id: res.data.client_id ? String(res.data.client_id) : undefined,
-      client: "Internal",
-      contentType: res.data.contentType || "Post",
-      platform: res.data.platform || "LinkedIn",
-      description: res.data.description || "",
-      assignee: res.data.assignee || "Unassigned",
-      priority: res.data.priority,
-      dueDate: res.data.dueDate || "",
-      status: stageFromDb(res.data.status),
-      createdAt: res.data.updated_at,
-    };
+    // Resilient fallback: If RPC function not found in schema cache, update directly in Supabase
+    if (res.status_code === 404) {
+      const dbUpdates: any = {};
+      if (updates.title) dbUpdates.title = updates.title;
+      if (updates.client_id !== undefined) dbUpdates.client_id = updates.client_id;
+      if (updates.contentType) dbUpdates.content_type = updates.contentType;
+      if (updates.platform) dbUpdates.platform = updates.platform;
+      if (updates.description !== undefined) dbUpdates.description = updates.description;
+      if (updates.assignee) dbUpdates.assigned_employee = updates.assignee;
+      if (updates.priority) dbUpdates.priority = updates.priority;
+      if (updates.dueDate) dbUpdates.due_date = updates.dueDate;
+      if (updates.status) dbUpdates.stage = stageToDb(updates.status);
 
-    MEMORY_CACHE.content = MEMORY_CACHE.content.map((c) => (c.id === id ? updated : c));
-    dispatchChange("content");
-    return updated;
+      const { data: updatedRow, error: updateErr } = await supabase
+        .from("content")
+        .update(dbUpdates)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (updateErr) {
+        throw new Error(updateErr.message);
+      }
+
+      const updated: ContentItem = {
+        id: String(updatedRow.id),
+        title: updatedRow.title,
+        client_id: updatedRow.client_id ? String(updatedRow.client_id) : undefined,
+        client: "Internal",
+        contentType: updatedRow.content_type || "Post",
+        platform: updatedRow.platform || "LinkedIn",
+        description: updatedRow.description || "",
+        assignee: updatedRow.assigned_employee || "Unassigned",
+        priority: updatedRow.priority,
+        dueDate: updatedRow.due_date || "",
+        status: stageFromDb(updatedRow.stage),
+        createdAt: updatedRow.created_at,
+      };
+
+      MEMORY_CACHE.content = MEMORY_CACHE.content.map((c) => (c.id === id ? updated : c));
+      dispatchChange("content");
+      return updated;
+    }
+
+    throw new Error(res.message || "Failed to update content item");
   },
 
   async deleteContentItem(id: string): Promise<boolean> {
     const res = await callRpc("fn_content_delete", { p_id: id });
-    if (!res.is_success) {
-      throw new Error(res.message || "Failed to delete content");
+    if (res.is_success) {
+      MEMORY_CACHE.content = MEMORY_CACHE.content.filter((c) => c.id !== id);
+      dispatchChange("content");
+      return true;
     }
-    MEMORY_CACHE.content = MEMORY_CACHE.content.filter((c) => c.id !== id);
-    dispatchChange("content");
-    return true;
+
+    // Resilient fallback: If RPC function not found in schema cache, delete directly in Supabase
+    if (res.status_code === 404) {
+      const { error: delErr } = await supabase.from("content").delete().eq("id", id);
+      if (delErr) {
+        throw new Error(delErr.message);
+      }
+      MEMORY_CACHE.content = MEMORY_CACHE.content.filter((c) => c.id !== id);
+      dispatchChange("content");
+      return true;
+    }
+
+    throw new Error(res.message || "Failed to delete content");
   },
 
   // ----------------------------------------------------------------------------
@@ -992,6 +1700,42 @@ export const DataService = {
       MEMORY_CACHE.networking = mapped;
       return mapped;
     }
+
+    // Resilient fallback: If RPC function not deployed yet, query live networking table
+    try {
+      let req = supabase.from("networking").select("*");
+      if (status && status !== "ALL") req = req.eq("status", status);
+      if (type && type !== "ALL") req = req.eq("networking_type", type);
+      const { data: tableData, error: tableErr } = await req;
+      if (!tableErr && tableData && tableData.length > 0) {
+        let list = tableData;
+        if (query?.trim()) {
+          const q = query.trim().toLowerCase();
+          list = list.filter(
+            (n: any) =>
+              (n.person_name && n.person_name.toLowerCase().includes(q)) ||
+              (n.company && n.company.toLowerCase().includes(q))
+          );
+        }
+        const mapped: NetworkingEntry[] = list.map((n: any) => ({
+          id: String(n.id),
+          person: n.person_name || n.person || "",
+          company: n.company || "",
+          email: n.email || "",
+          phone: n.phone || "",
+          date: n.date || "",
+          type: n.networking_type || n.type || "Call",
+          status: n.status || "Connected",
+          notes: n.notes || "",
+          followUpDate: n.follow_up_date || n.followUpDate || "",
+          tenant_id: n.tenant_id,
+          createdAt: n.created_at,
+        }));
+        MEMORY_CACHE.networking = mapped;
+        return mapped;
+      }
+    } catch (_) {}
+
     return MEMORY_CACHE.networking;
   },
 
@@ -1008,27 +1752,68 @@ export const DataService = {
       p_follow_up_date: entry.followUpDate || null,
     });
 
-    if (!res.is_success || !res.data) {
-      throw new Error(res.message || "Failed to create networking contact");
+    if (res.is_success && res.data) {
+      const created: NetworkingEntry = {
+        id: String(res.data.id),
+        person: res.data.person,
+        company: res.data.company,
+        email: res.data.email || "",
+        phone: res.data.phone || "",
+        date: res.data.date,
+        type: res.data.type,
+        status: res.data.status,
+        notes: res.data.notes || "",
+        followUpDate: res.data.followUpDate || "",
+        createdAt: res.data.created_at,
+      };
+
+      MEMORY_CACHE.networking = [created, ...MEMORY_CACHE.networking];
+      dispatchChange("networking");
+      return created;
     }
 
-    const created: NetworkingEntry = {
-      id: String(res.data.id),
-      person: res.data.person,
-      company: res.data.company,
-      email: res.data.email || "",
-      phone: res.data.phone || "",
-      date: res.data.date,
-      type: res.data.type,
-      status: res.data.status,
-      notes: res.data.notes || "",
-      followUpDate: res.data.followUpDate || "",
-      createdAt: res.data.created_at,
-    };
+    // Resilient fallback: If RPC function not found in schema cache, insert directly into Supabase
+    if (res.status_code === 404) {
+      const { data: inserted, error: insertErr } = await supabase
+        .from("networking")
+        .insert({
+          person_name: entry.person.trim(),
+          company: entry.company.trim(),
+          email: entry.email?.trim() || "",
+          phone: entry.phone?.trim() || "",
+          networking_type: entry.type || "Call",
+          date: entry.date || new Date().toISOString().split("T")[0],
+          status: entry.status || "Connected",
+          notes: entry.notes?.trim() || "",
+          follow_up_date: entry.followUpDate || null,
+        })
+        .select()
+        .single();
 
-    MEMORY_CACHE.networking = [created, ...MEMORY_CACHE.networking];
-    dispatchChange("networking");
-    return created;
+      if (insertErr) {
+        throw new Error(insertErr.message);
+      }
+
+      const created: NetworkingEntry = {
+        id: String(inserted.id),
+        person: inserted.person_name,
+        company: inserted.company,
+        email: inserted.email || "",
+        phone: inserted.phone || "",
+        date: inserted.date,
+        type: inserted.networking_type,
+        status: inserted.status,
+        notes: inserted.notes || "",
+        followUpDate: inserted.follow_up_date || "",
+        createdAt: inserted.created_at,
+      };
+
+      MEMORY_CACHE.networking = [created, ...MEMORY_CACHE.networking];
+      dispatchChange("networking");
+      return created;
+    }
+
+    throw new Error(res.message || "Failed to create networking contact");
   },
 
   async updateNetworkingContact(id: string, updates: Partial<NetworkingEntry>): Promise<NetworkingEntry | null> {
@@ -1045,37 +1830,92 @@ export const DataService = {
       p_follow_up_date: updates.followUpDate || null,
     });
 
-    if (!res.is_success || !res.data) {
-      throw new Error(res.message || "Failed to update networking contact");
+    if (res.is_success && res.data) {
+      const updated: NetworkingEntry = {
+        id: String(res.data.id),
+        person: res.data.person,
+        company: res.data.company,
+        email: res.data.email || "",
+        phone: res.data.phone || "",
+        date: res.data.date,
+        type: res.data.type,
+        status: res.data.status,
+        notes: res.data.notes || "",
+        followUpDate: res.data.followUpDate || "",
+        createdAt: res.data.updated_at,
+      };
+
+      MEMORY_CACHE.networking = MEMORY_CACHE.networking.map((n) => (n.id === id ? updated : n));
+      dispatchChange("networking");
+      return updated;
     }
 
-    const updated: NetworkingEntry = {
-      id: String(res.data.id),
-      person: res.data.person,
-      company: res.data.company,
-      email: res.data.email || "",
-      phone: res.data.phone || "",
-      date: res.data.date,
-      type: res.data.type,
-      status: res.data.status,
-      notes: res.data.notes || "",
-      followUpDate: res.data.followUpDate || "",
-      createdAt: res.data.updated_at,
-    };
+    // Resilient fallback: If RPC function not found in schema cache, update directly in Supabase
+    if (res.status_code === 404) {
+      const dbUpdates: any = {};
+      if (updates.person) dbUpdates.person_name = updates.person;
+      if (updates.company) dbUpdates.company = updates.company;
+      if (updates.email !== undefined) dbUpdates.email = updates.email;
+      if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+      if (updates.type) dbUpdates.networking_type = updates.type;
+      if (updates.date) dbUpdates.date = updates.date;
+      if (updates.status) dbUpdates.status = updates.status;
+      if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+      if (updates.followUpDate !== undefined) dbUpdates.follow_up_date = updates.followUpDate;
 
-    MEMORY_CACHE.networking = MEMORY_CACHE.networking.map((n) => (n.id === id ? updated : n));
-    dispatchChange("networking");
-    return updated;
+      const { data: updatedRow, error: updateErr } = await supabase
+        .from("networking")
+        .update(dbUpdates)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (updateErr) {
+        throw new Error(updateErr.message);
+      }
+
+      const updated: NetworkingEntry = {
+        id: String(updatedRow.id),
+        person: updatedRow.person_name,
+        company: updatedRow.company,
+        email: updatedRow.email || "",
+        phone: updatedRow.phone || "",
+        date: updatedRow.date,
+        type: updatedRow.networking_type,
+        status: updatedRow.status,
+        notes: updatedRow.notes || "",
+        followUpDate: updatedRow.follow_up_date || "",
+        createdAt: updatedRow.created_at,
+      };
+
+      MEMORY_CACHE.networking = MEMORY_CACHE.networking.map((n) => (n.id === id ? updated : n));
+      dispatchChange("networking");
+      return updated;
+    }
+
+    throw new Error(res.message || "Failed to update networking contact");
   },
 
   async deleteNetworkingContact(id: string): Promise<boolean> {
     const res = await callRpc("fn_networking_delete", { p_id: id });
-    if (!res.is_success) {
-      throw new Error(res.message || "Failed to delete networking contact");
+    if (res.is_success) {
+      MEMORY_CACHE.networking = MEMORY_CACHE.networking.filter((n) => n.id !== id);
+      dispatchChange("networking");
+      return true;
     }
-    MEMORY_CACHE.networking = MEMORY_CACHE.networking.filter((n) => n.id !== id);
-    dispatchChange("networking");
-    return true;
+
+    // Resilient fallback: If RPC function not found in schema cache, delete directly in Supabase
+    if (res.status_code === 404) {
+      const { error: delErr } = await supabase.from("networking").delete().eq("id", id);
+      if (delErr) {
+        throw new Error(delErr.message);
+      }
+      MEMORY_CACHE.networking = MEMORY_CACHE.networking.filter((n) => n.id !== id);
+      dispatchChange("networking");
+      return true;
+    }
+
+    throw new Error(res.message || "Failed to delete networking contact");
   },
 
   // ----------------------------------------------------------------------------
@@ -1107,6 +1947,43 @@ export const DataService = {
       MEMORY_CACHE.engagement = mapped;
       return mapped;
     }
+
+    // Resilient fallback: If RPC function not deployed yet, query live engagement table
+    try {
+      let req = supabase.from("engagement").select("*");
+      if (platform && platform !== "ALL") req = req.eq("platform", platform);
+      const { data: tableData, error: tableErr } = await req;
+      if (!tableErr && tableData && tableData.length > 0) {
+        let list = tableData;
+        if (query?.trim()) {
+          const q = query.trim().toLowerCase();
+          list = list.filter(
+            (e: any) =>
+              (e.platform && e.platform.toLowerCase().includes(q)) ||
+              (e.notes && e.notes.toLowerCase().includes(q))
+          );
+        }
+        const mapped: EngagementEntry[] = list.map((e: any) => ({
+          id: String(e.id),
+          client_id: e.client_id ? String(e.client_id) : undefined,
+          client: "Client Account",
+          platform: e.platform || "LinkedIn",
+          date: e.date || "",
+          likes: e.likes ?? 0,
+          comments: e.comments ?? 0,
+          shares: e.shares ?? 0,
+          reach: e.reach ?? 0,
+          impressions: e.impressions ?? 0,
+          performance: e.performance || "Strong",
+          notes: e.notes || "",
+          tenant_id: e.tenant_id,
+          createdAt: e.created_at,
+        }));
+        MEMORY_CACHE.engagement = mapped;
+        return mapped;
+      }
+    } catch (_) {}
+
     return MEMORY_CACHE.engagement;
   },
 
@@ -1124,39 +2001,95 @@ export const DataService = {
       p_notes: entry.notes?.trim() || null,
     });
 
-    if (!res.is_success || !res.data) {
-      throw new Error(res.message || "Failed to create engagement metric");
+    if (res.is_success && res.data) {
+      const created: EngagementEntry = {
+        id: String(res.data.id),
+        client_id: res.data.client_id ? String(res.data.client_id) : undefined,
+        client: "Client Account",
+        platform: res.data.platform,
+        date: res.data.date,
+        likes: res.data.likes,
+        comments: res.data.comments,
+        shares: res.data.shares,
+        reach: res.data.reach,
+        impressions: res.data.impressions,
+        performance: res.data.performance,
+        notes: res.data.notes || "",
+        createdAt: res.data.created_at,
+      };
+
+      MEMORY_CACHE.engagement = [created, ...MEMORY_CACHE.engagement];
+      dispatchChange("engagement");
+      return created;
     }
 
-    const created: EngagementEntry = {
-      id: String(res.data.id),
-      client_id: res.data.client_id ? String(res.data.client_id) : undefined,
-      client: "Client Account",
-      platform: res.data.platform,
-      date: res.data.date,
-      likes: res.data.likes,
-      comments: res.data.comments,
-      shares: res.data.shares,
-      reach: res.data.reach,
-      impressions: res.data.impressions,
-      performance: res.data.performance,
-      notes: res.data.notes || "",
-      createdAt: res.data.created_at,
-    };
+    // Resilient fallback: If RPC function not found in schema cache, insert directly into Supabase
+    if (res.status_code === 404) {
+      const { data: inserted, error: insertErr } = await supabase
+        .from("engagement")
+        .insert({
+          client_id: entry.client_id || null,
+          platform: entry.platform || "LinkedIn",
+          date: entry.date || new Date().toISOString().split("T")[0],
+          likes: entry.likes || 0,
+          comments: entry.comments || 0,
+          shares: entry.shares || 0,
+          reach: entry.reach || 0,
+          impressions: entry.impressions || 0,
+          performance: entry.performance || "Strong",
+          notes: entry.notes?.trim() || "",
+        })
+        .select()
+        .single();
 
-    MEMORY_CACHE.engagement = [created, ...MEMORY_CACHE.engagement];
-    dispatchChange("engagement");
-    return created;
+      if (insertErr) {
+        throw new Error(insertErr.message);
+      }
+
+      const created: EngagementEntry = {
+        id: String(inserted.id),
+        client_id: inserted.client_id ? String(inserted.client_id) : undefined,
+        client: "Client Account",
+        platform: inserted.platform,
+        date: inserted.date,
+        likes: inserted.likes,
+        comments: inserted.comments,
+        shares: inserted.shares,
+        reach: inserted.reach,
+        impressions: inserted.impressions,
+        performance: inserted.performance,
+        notes: inserted.notes || "",
+        createdAt: inserted.created_at,
+      };
+
+      MEMORY_CACHE.engagement = [created, ...MEMORY_CACHE.engagement];
+      dispatchChange("engagement");
+      return created;
+    }
+
+    throw new Error(res.message || "Failed to create engagement metric");
   },
 
   async deleteEngagementMetric(id: string): Promise<boolean> {
     const res = await callRpc("fn_engagement_delete", { p_id: id });
-    if (!res.is_success) {
-      throw new Error(res.message || "Failed to delete engagement metric");
+    if (res.is_success) {
+      MEMORY_CACHE.engagement = MEMORY_CACHE.engagement.filter((e) => e.id !== id);
+      dispatchChange("engagement");
+      return true;
     }
-    MEMORY_CACHE.engagement = MEMORY_CACHE.engagement.filter((e) => e.id !== id);
-    dispatchChange("engagement");
-    return true;
+
+    // Resilient fallback: If RPC function not found in schema cache, delete directly in Supabase
+    if (res.status_code === 404) {
+      const { error: delErr } = await supabase.from("engagement").delete().eq("id", id);
+      if (delErr) {
+        throw new Error(delErr.message);
+      }
+      MEMORY_CACHE.engagement = MEMORY_CACHE.engagement.filter((e) => e.id !== id);
+      dispatchChange("engagement");
+      return true;
+    }
+
+    throw new Error(res.message || "Failed to delete engagement metric");
   },
 
   // ----------------------------------------------------------------------------
@@ -1185,6 +2118,40 @@ export const DataService = {
       MEMORY_CACHE.calendar = mapped;
       return mapped;
     }
+
+    // Resilient fallback: If RPC function not deployed yet, query live calendar_events table
+    try {
+      let req = supabase.from("calendar_events").select("*");
+      if (type && type !== "ALL") req = req.eq("event_type", type);
+      const { data: tableData, error: tableErr } = await req;
+      if (!tableErr && tableData && tableData.length > 0) {
+        let list = tableData;
+        if (query?.trim()) {
+          const q = query.trim().toLowerCase();
+          list = list.filter(
+            (e: any) =>
+              (e.title && e.title.toLowerCase().includes(q)) ||
+              (e.description && e.description.toLowerCase().includes(q))
+          );
+        }
+        const mapped: CalendarEvent[] = list.map((e: any) => ({
+          id: String(e.id),
+          title: e.title || "",
+          description: e.description || "",
+          client_id: e.client_id ? String(e.client_id) : undefined,
+          client: "Internal",
+          type: e.event_type || e.type || "Meeting",
+          startTime: e.start_time || e.startTime || "",
+          endTime: e.end_time || e.endTime || "",
+          date: (e.start_time ? String(e.start_time).split("T")[0] : "") || e.date || "",
+          tenant_id: e.tenant_id,
+          createdAt: e.created_at,
+        }));
+        MEMORY_CACHE.calendar = mapped;
+        return mapped;
+      }
+    } catch (_) {}
+
     return MEMORY_CACHE.calendar;
   },
 
@@ -1198,36 +2165,85 @@ export const DataService = {
       p_end_time: event.endTime || null,
     });
 
-    if (!res.is_success || !res.data) {
-      throw new Error(res.message || "Failed to create calendar event");
+    if (res.is_success && res.data) {
+      const created: CalendarEvent = {
+        id: String(res.data.id),
+        title: res.data.title,
+        description: res.data.description || "",
+        client_id: res.data.client_id ? String(res.data.client_id) : undefined,
+        client: "Internal",
+        type: res.data.type,
+        startTime: res.data.startTime,
+        endTime: res.data.endTime,
+        date: res.data.date,
+        createdAt: res.data.created_at,
+      };
+
+      MEMORY_CACHE.calendar = [created, ...MEMORY_CACHE.calendar];
+      dispatchChange("calendar_events");
+      return created;
     }
 
-    const created: CalendarEvent = {
-      id: String(res.data.id),
-      title: res.data.title,
-      description: res.data.description || "",
-      client_id: res.data.client_id ? String(res.data.client_id) : undefined,
-      client: "Internal",
-      type: res.data.type,
-      startTime: res.data.startTime,
-      endTime: res.data.endTime,
-      date: res.data.date,
-      createdAt: res.data.created_at,
-    };
+    // Resilient fallback: If RPC function not found in schema cache, insert directly into Supabase
+    if (res.status_code === 404) {
+      const { data: inserted, error: insertErr } = await supabase
+        .from("calendar_events")
+        .insert({
+          title: event.title.trim(),
+          client_id: event.client_id || null,
+          description: event.description?.trim() || "",
+          event_type: event.type || "Meeting",
+          start_time: event.startTime || (event.date ? `${event.date}T09:00:00Z` : new Date().toISOString()),
+          end_time: event.endTime || (event.date ? `${event.date}T10:00:00Z` : null),
+        })
+        .select()
+        .single();
 
-    MEMORY_CACHE.calendar = [created, ...MEMORY_CACHE.calendar];
-    dispatchChange("calendar_events");
-    return created;
+      if (insertErr) {
+        throw new Error(insertErr.message);
+      }
+
+      const created: CalendarEvent = {
+        id: String(inserted.id),
+        title: inserted.title,
+        description: inserted.description || "",
+        client_id: inserted.client_id ? String(inserted.client_id) : undefined,
+        client: "Internal",
+        type: inserted.event_type || "Meeting",
+        startTime: inserted.start_time,
+        endTime: inserted.end_time,
+        date: inserted.start_time ? String(inserted.start_time).split("T")[0] : event.date || "",
+        createdAt: inserted.created_at,
+      };
+
+      MEMORY_CACHE.calendar = [created, ...MEMORY_CACHE.calendar];
+      dispatchChange("calendar_events");
+      return created;
+    }
+
+    throw new Error(res.message || "Failed to create calendar event");
   },
 
   async deleteCalendarEvent(id: string): Promise<boolean> {
     const res = await callRpc("fn_calendar_event_delete", { p_id: id });
-    if (!res.is_success) {
-      throw new Error(res.message || "Failed to delete calendar event");
+    if (res.is_success) {
+      MEMORY_CACHE.calendar = MEMORY_CACHE.calendar.filter((e) => e.id !== id);
+      dispatchChange("calendar_events");
+      return true;
     }
-    MEMORY_CACHE.calendar = MEMORY_CACHE.calendar.filter((e) => e.id !== id);
-    dispatchChange("calendar_events");
-    return true;
+
+    // Resilient fallback: If RPC function not found in schema cache, delete directly in Supabase
+    if (res.status_code === 404) {
+      const { error: delErr } = await supabase.from("calendar_events").delete().eq("id", id);
+      if (delErr) {
+        throw new Error(delErr.message);
+      }
+      MEMORY_CACHE.calendar = MEMORY_CACHE.calendar.filter((e) => e.id !== id);
+      dispatchChange("calendar_events");
+      return true;
+    }
+
+    throw new Error(res.message || "Failed to delete calendar event");
   },
 
   // ----------------------------------------------------------------------------
@@ -1248,6 +2264,25 @@ export const DataService = {
       MEMORY_CACHE.reports = mapped;
       return mapped;
     }
+
+    // Resilient fallback: If RPC function not deployed yet, query live reports table
+    try {
+      const { data: tableData, error: tableErr } = await supabase.from("reports").select("*");
+      if (!tableErr && tableData && tableData.length > 0) {
+        const mapped: ReportEntry[] = tableData.map((r: any) => ({
+          id: String(r.id),
+          client_id: r.client_id ? String(r.client_id) : undefined,
+          client: "Workspace Aggregate",
+          weekStart: r.week_start,
+          weekEnd: r.week_end,
+          reportData: r.report_data,
+          createdAt: r.created_at,
+        }));
+        MEMORY_CACHE.reports = mapped;
+        return mapped;
+      }
+    } catch (_) {}
+
     return MEMORY_CACHE.reports;
   },
 
@@ -1259,33 +2294,77 @@ export const DataService = {
       p_report_data: report.reportData || {},
     });
 
-    if (!res.is_success || !res.data) {
-      throw new Error(res.message || "Failed to create report");
+    if (res.is_success && res.data) {
+      const created: ReportEntry = {
+        id: String(res.data.id),
+        client_id: res.data.client_id ? String(res.data.client_id) : undefined,
+        client: "Workspace Aggregate",
+        weekStart: res.data.week_start,
+        weekEnd: res.data.week_end,
+        reportData: res.data.report_data,
+        createdAt: res.data.created_at,
+      };
+
+      MEMORY_CACHE.reports = [created, ...MEMORY_CACHE.reports];
+      dispatchChange("reports");
+      return created;
     }
 
-    const created: ReportEntry = {
-      id: String(res.data.id),
-      client_id: res.data.client_id ? String(res.data.client_id) : undefined,
-      client: "Workspace Aggregate",
-      weekStart: res.data.week_start,
-      weekEnd: res.data.week_end,
-      reportData: res.data.report_data,
-      createdAt: res.data.created_at,
-    };
+    // Resilient fallback: If RPC function not found in schema cache, insert directly into Supabase
+    if (res.status_code === 404) {
+      const { data: inserted, error: insertErr } = await supabase
+        .from("reports")
+        .insert({
+          client_id: report.client_id || null,
+          week_start: report.weekStart || new Date().toISOString().split("T")[0],
+          week_end: report.weekEnd || new Date().toISOString().split("T")[0],
+          report_data: report.reportData || {},
+        })
+        .select()
+        .single();
 
-    MEMORY_CACHE.reports = [created, ...MEMORY_CACHE.reports];
-    dispatchChange("reports");
-    return created;
+      if (insertErr) {
+        throw new Error(insertErr.message);
+      }
+
+      const created: ReportEntry = {
+        id: String(inserted.id),
+        client_id: inserted.client_id ? String(inserted.client_id) : undefined,
+        client: "Workspace Aggregate",
+        weekStart: inserted.week_start,
+        weekEnd: inserted.week_end,
+        reportData: inserted.report_data,
+        createdAt: inserted.created_at,
+      };
+
+      MEMORY_CACHE.reports = [created, ...MEMORY_CACHE.reports];
+      dispatchChange("reports");
+      return created;
+    }
+
+    throw new Error(res.message || "Failed to create report");
   },
 
   async deleteReport(id: string): Promise<boolean> {
     const res = await callRpc("fn_report_delete", { p_id: id });
-    if (!res.is_success) {
-      throw new Error(res.message || "Failed to delete report");
+    if (res.is_success) {
+      MEMORY_CACHE.reports = MEMORY_CACHE.reports.filter((r) => r.id !== id);
+      dispatchChange("reports");
+      return true;
     }
-    MEMORY_CACHE.reports = MEMORY_CACHE.reports.filter((r) => r.id !== id);
-    dispatchChange("reports");
-    return true;
+
+    // Resilient fallback: If RPC function not found in schema cache, delete directly in Supabase
+    if (res.status_code === 404) {
+      const { error: delErr } = await supabase.from("reports").delete().eq("id", id);
+      if (delErr) {
+        throw new Error(delErr.message);
+      }
+      MEMORY_CACHE.reports = MEMORY_CACHE.reports.filter((r) => r.id !== id);
+      dispatchChange("reports");
+      return true;
+    }
+
+    throw new Error(res.message || "Failed to delete report");
   },
 
   // ----------------------------------------------------------------------------

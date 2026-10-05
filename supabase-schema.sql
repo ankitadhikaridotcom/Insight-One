@@ -6,6 +6,27 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ==============================================================================
+-- CLEAN UP PREVIOUS DEVELOPMENT TABLES (ENSURES TYPE & FK COMPATIBILITY)
+-- ==============================================================================
+DROP TABLE IF EXISTS public.social_profiles CASCADE;
+DROP TABLE IF EXISTS public.calendar_events CASCADE;
+DROP TABLE IF EXISTS public.reports CASCADE;
+DROP TABLE IF EXISTS public.engagement CASCADE;
+DROP TABLE IF EXISTS public.networking CASCADE;
+DROP TABLE IF EXISTS public.tasks CASCADE;
+DROP TABLE IF EXISTS public.content CASCADE;
+DROP TABLE IF EXISTS public.projects CASCADE;
+DROP TABLE IF EXISTS public.clients CASCADE;
+DROP TABLE IF EXISTS public.role_menu_items CASCADE;
+DROP TABLE IF EXISTS public.role_scopes CASCADE;
+DROP TABLE IF EXISTS public.scopes CASCADE;
+DROP TABLE IF EXISTS public.roles CASCADE;
+DROP TABLE IF EXISTS public.profiles CASCADE;
+DROP TABLE IF EXISTS public.agencies CASCADE;
+DROP TABLE IF EXISTS public.tenants CASCADE;
+DROP TABLE IF EXISTS public.error_log CASCADE;
+
+-- ==============================================================================
 -- PART 1: CORE MULTI-TENANCY & RBAC TABLES
 -- ==============================================================================
 
