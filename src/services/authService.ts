@@ -1,12 +1,30 @@
 import { supabase } from "@/lib/supabaseClient";
 
-export type UserRole = "admin" | "employee";
+export type UserRole =
+  | "Role Host"
+  | "Tenant Admin"
+  | "content creator"
+  | "content approver"
+  | "Viewer"
+  | "admin"
+  | "employee";
 
 export interface DemoUser {
   id?: string;
   email: string;
   name: string;
   role: UserRole;
+}
+
+export function normalizeRole(r?: string): UserRole {
+  if (!r) return "content creator";
+  const lower = r.toLowerCase().trim();
+  if (lower === "role host" || lower === "host") return "Role Host";
+  if (lower === "tenant admin" || lower === "admin") return "Tenant Admin";
+  if (lower === "content approver" || lower === "approver") return "content approver";
+  if (lower === "viewer") return "Viewer";
+  if (lower === "employee") return "content creator";
+  return "content creator";
 }
 
 export const AUTH_STORAGE_KEY = "insight-demo-auth";
@@ -16,13 +34,31 @@ const DEFAULT_DEMO_CREDENTIALS: Record<string, { email: string; password: string
     email: "admin@insightone.com",
     password: "Admin@123",
     name: "Admin User",
-    role: "admin",
+    role: "Tenant Admin",
+  },
+  "creator@insightone.com": {
+    email: "creator@insightone.com",
+    password: "Creator@123",
+    name: "Content Producer",
+    role: "content creator",
+  },
+  "approver@insightone.com": {
+    email: "approver@insightone.com",
+    password: "Approver@123",
+    name: "Content Approver",
+    role: "content approver",
+  },
+  "viewer@insightone.com": {
+    email: "viewer@insightone.com",
+    password: "Viewer@123",
+    name: "Client Observer",
+    role: "Viewer",
   },
   "employee@insightone.com": {
     email: "employee@insightone.com",
     password: "Employee@123",
     name: "Employee User",
-    role: "employee",
+    role: "content creator",
   },
 };
 
@@ -68,13 +104,13 @@ export async function login(email: string, password: string): Promise<DemoUser |
 
     if (!signInError && signInData.user) {
       // Fetch role and profile from database via RPC
-      let role: UserRole = "employee";
+      let role: UserRole = "content creator";
       let name = signInData.user.user_metadata?.full_name || normalizedEmail.split("@")[0];
 
       try {
         const { data: profile } = await supabase.rpc("fn_user_me");
         if (profile?.data) {
-          role = profile.data.role?.toLowerCase() === "admin" ? "admin" : "employee";
+          role = normalizeRole(profile.data.role);
           name = profile.data.full_name || name;
         }
       } catch {}
@@ -100,7 +136,7 @@ export async function login(email: string, password: string): Promise<DemoUser |
 
     if (profile) {
       const dbPassword = (profile as any).password;
-      const role: UserRole = profile.role?.toLowerCase() === "admin" ? "admin" : "employee";
+      const role: UserRole = normalizeRole(profile.role);
       const name = profile.full_name || normalizedEmail.split("@")[0];
 
       const vault = getAssignedUserCredentials();
@@ -133,7 +169,7 @@ export async function login(email: string, password: string): Promise<DemoUser |
     const user: DemoUser = {
       email: assigned.email,
       name: assigned.name || normalizedEmail.split("@")[0],
-      role: assigned.role || "employee",
+      role: normalizeRole(assigned.role),
     };
     saveAuthUser(user);
     return user;
@@ -145,7 +181,7 @@ export async function login(email: string, password: string): Promise<DemoUser |
     const user: DemoUser = {
       email: demo.email,
       name: demo.name,
-      role: demo.role,
+      role: normalizeRole(demo.role),
     };
     saveAuthUser(user);
     return user;
@@ -183,7 +219,7 @@ export function getCurrentUser(): DemoUser | null {
       id: parsed.id,
       email: String(parsed.email),
       name: String(parsed.name),
-      role: parsed.role === "admin" ? "admin" : "employee",
+      role: normalizeRole(parsed.role),
     };
   } catch {
     return null;
@@ -197,7 +233,7 @@ export async function getSupabaseUser(): Promise<DemoUser | null> {
     if (session?.user) {
       const email = session.user.email || cached?.email || "";
       let name = cached?.name || email.split("@")[0];
-      let role: UserRole = cached?.role || (email.includes("admin") ? "admin" : "employee");
+      let role: UserRole = cached?.role || (email.includes("admin") ? "Tenant Admin" : "content creator");
 
       try {
         const { data: profile } = await supabase
@@ -209,7 +245,7 @@ export async function getSupabaseUser(): Promise<DemoUser | null> {
         if (profile) {
           name = profile.full_name || name;
           if (profile.role) {
-            role = profile.role.toLowerCase().includes("admin") ? "admin" : "employee";
+            role = normalizeRole(profile.role);
           }
         }
       } catch {
@@ -261,10 +297,9 @@ export function getRoleBasedNavigation(role: UserRole) {
     { href: "/calendar", label: "Calendar", icon: "◫" },
     { href: "/statistics", label: "Statistics", icon: "▤" },
     { href: "/reports", label: "Reports", icon: "▥" },
-    { href: "/settings", label: "Settings", icon: "⚙" },
   ];
 
-  const employeeItems = [
+  const approverItems = [
     { href: "/dashboard", label: "Dashboard", icon: "▣" },
     { href: "/clients", label: "Clients", icon: "◎" },
     { href: "/projects", label: "Projects", icon: "📁" },
@@ -272,13 +307,41 @@ export function getRoleBasedNavigation(role: UserRole) {
     { href: "/tasks", label: "Tasks", icon: "✓" },
     { href: "/calendar", label: "Calendar", icon: "◫" },
     { href: "/engagement", label: "Engagement", icon: "◔" },
+    { href: "/networking", label: "Networking", icon: "◌" },
+    { href: "/reports", label: "Reports", icon: "▥" },
   ];
 
-  return role === "admin" ? adminItems : employeeItems;
+  const creatorItems = [
+    { href: "/dashboard", label: "Dashboard", icon: "▣" },
+    { href: "/projects", label: "Projects", icon: "📁" },
+    { href: "/content", label: "Content", icon: "✦" },
+    { href: "/tasks", label: "Tasks", icon: "✓" },
+    { href: "/calendar", label: "Calendar", icon: "◫" },
+    { href: "/engagement", label: "Engagement", icon: "◔" },
+  ];
+
+  const viewerItems = [
+    { href: "/dashboard", label: "Dashboard", icon: "▣" },
+    { href: "/projects", label: "Projects", icon: "📁" },
+    { href: "/calendar", label: "Calendar", icon: "◫" },
+    { href: "/statistics", label: "Statistics", icon: "▤" },
+  ];
+
+  const normalized = normalizeRole(role);
+  if (normalized === "Role Host" || normalized === "Tenant Admin" || normalized === "admin") {
+    return adminItems;
+  }
+  if (normalized === "content approver") {
+    return approverItems;
+  }
+  if (normalized === "Viewer") {
+    return viewerItems;
+  }
+  return creatorItems;
 }
 
 export function canAccessRoute(role: UserRole, pathname: string) {
   const allowedPaths = getRoleBasedNavigation(role).map((item) => item.href);
   const normalized = pathname === "/" ? "/dashboard" : pathname;
-  return allowedPaths.some((path) => normalized === path || normalized.startsWith(`${path}/`)) || normalized === "/login";
+  return allowedPaths.some((path) => normalized === path || normalized.startsWith(`${path}/`)) || normalized === "/login" || normalized === "/settings";
 }

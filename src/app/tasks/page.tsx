@@ -10,6 +10,7 @@ import { ConfirmModal } from "@/components/confirm-modal";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
+import { SearchableSelect, SelectOption } from "@/components/searchable-select";
 
 export default function TasksPage() {
   const { toast } = useToast();
@@ -140,28 +141,34 @@ export default function TasksPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
-                <select
+                <SearchableSelect
+                  placeholder="All Statuses"
+                  options={[
+                    { value: "ALL", label: "All Statuses" },
+                    { value: "To Do", label: "To Do" },
+                    { value: "In Progress", label: "In Progress" },
+                    { value: "Blocked", label: "Blocked" },
+                    { value: "Completed", label: "Completed" },
+                  ] as SelectOption[]}
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  <option value="ALL">All Statuses</option>
-                  <option value="To Do">To Do</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Blocked">Blocked</option>
-                  <option value="Completed">Completed</option>
-                </select>
+                  onChange={(val: string) => setStatusFilter(val ?? "ALL")}
+                  isClearable={false}
+                  className="w-40"
+                />
 
-                <select
+                <SearchableSelect
+                  placeholder="All Priorities"
+                  options={[
+                    { value: "ALL", label: "All Priorities" },
+                    { value: "High", label: "High" },
+                    { value: "Medium", label: "Medium" },
+                    { value: "Low", label: "Low" },
+                  ] as SelectOption[]}
                   value={priorityFilter}
-                  onChange={(e) => setPriorityFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  <option value="ALL">All Priorities</option>
-                  <option value="High">High</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Low">Low</option>
-                </select>
+                  onChange={(val: string) => setPriorityFilter(val ?? "ALL")}
+                  isClearable={false}
+                  className="w-40"
+                />
 
                 {hasActiveFilters && (
                   <button

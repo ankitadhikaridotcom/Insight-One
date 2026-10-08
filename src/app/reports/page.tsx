@@ -7,6 +7,7 @@ import { DataService, Client, Task, ContentItem } from "@/services/dataService";
 import { Modal } from "@/components/modal";
 import { StatusBadge } from "@/components/status-badge";
 import { useToast } from "@/components/toast";
+import { SearchableSelect, SelectOption } from "@/components/searchable-select";
 
 export default function ReportsPage() {
   const { toast } = useToast();
@@ -249,58 +250,52 @@ export default function ReportsPage() {
           onClose={() => setIsGenerateOpen(false)}
           title="Configure & Generate Report"
           subtitle="Customize the report parameters and data inclusion filters."
-          maxWidth="md"
+          maxWidth="3xl"
         >
           <form onSubmit={handleGenerateSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-                Report Type
-              </label>
-              <select
-                value={reportType}
-                onChange={(e) => setReportType(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500"
-              >
-                <option value="Weekly Performance Summary">Weekly Performance Summary</option>
-                <option value="Client Account Health Review">Client Account Health Review</option>
-                <option value="Content Production & Delivery Audit">Content Production & Delivery Audit</option>
-                <option value="Team Task Execution Report">Team Task Execution Report</option>
-              </select>
-            </div>
+            <SearchableSelect
+              label="Report Type"
+              placeholder="Select report type..."
+              options={[
+                { value: "Weekly Performance Summary", label: "Weekly Performance Summary", subLabel: "KPIs and delivery metrics for the current week" },
+                { value: "Client Account Health Review", label: "Client Account Health Review", subLabel: "Portfolio status and account risk assessment" },
+                { value: "Content Production & Delivery Audit", label: "Content Production & Delivery Audit", subLabel: "Pipeline throughput and stage breakdown" },
+                { value: "Team Task Execution Report", label: "Team Task Execution Report", subLabel: "Individual and team task completion rates" },
+              ] as SelectOption[]}
+              value={reportType}
+              onChange={(val: string) => setReportType(val)}
+              isClearable={false}
+            />
 
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-                Client Scope
-              </label>
-              <select
-                value={selectedClient}
-                onChange={(e) => setSelectedClient(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500"
-              >
-                <option value="ALL">All Clients (Consolidated)</option>
-                {clients.map((c) => (
-                  <option key={String(c.id)} value={c.company || c.name}>
-                    {c.company || c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <SearchableSelect
+              label="Client Scope"
+              placeholder="Select client scope..."
+              options={[
+                { value: "ALL", label: "All Clients (Consolidated)", subLabel: "Aggregate report across entire portfolio" },
+                ...clients.map((c) => ({
+                  value: c.company || c.name,
+                  label: c.company || c.name,
+                  subLabel: `${c.status} account`,
+                } as SelectOption)),
+              ]}
+              value={selectedClient}
+              onChange={(val: string) => setSelectedClient(val)}
+              isClearable={false}
+            />
 
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-                Date Range
-              </label>
-              <select
-                value={dateRange}
-                onChange={(e) => setDateRange(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500"
-              >
-                <option value="Current Week">Current Week</option>
-                <option value="Last 14 Days">Last 14 Days</option>
-                <option value="Current Month">Current Month</option>
-                <option value="Quarter to Date (Q2)">Quarter to Date (Q2)</option>
-              </select>
-            </div>
+            <SearchableSelect
+              label="Date Range"
+              placeholder="Select date range..."
+              options={[
+                { value: "Current Week", label: "Current Week", subLabel: "Mon–Sun of this week" },
+                { value: "Last 14 Days", label: "Last 14 Days", subLabel: "Rolling two-week window" },
+                { value: "Current Month", label: "Current Month", subLabel: "First to last day of this month" },
+                { value: "Quarter to Date (Q2)", label: "Quarter to Date (Q2)", subLabel: "Start of Q2 through today" },
+              ] as SelectOption[]}
+              value={dateRange}
+              onChange={(val: string) => setDateRange(val)}
+              isClearable={false}
+            />
 
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
               <button

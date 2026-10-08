@@ -28,7 +28,7 @@ export function CalendarEventDetailsModal({
       onClose={onClose}
       title={event.title}
       subtitle={event.client ? `Client: ${event.client}` : "Internal Event"}
-      maxWidth="md"
+      maxWidth="2xl"
     >
       <div className="space-y-5">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">

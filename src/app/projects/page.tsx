@@ -10,6 +10,7 @@ import { ConfirmModal } from "@/components/confirm-modal";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
+import { SearchableSelect, SelectOption } from "@/components/searchable-select";
 
 type ProjectColumn = "Planning" | "In Progress" | "Review" | "Completed";
 
@@ -168,16 +169,19 @@ export default function ProjectsPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
-                <select
+                <SearchableSelect
+                  placeholder="All Priorities"
+                  options={[
+                    { value: "ALL", label: "All Priorities" },
+                    { value: "High", label: "High Priority" },
+                    { value: "Medium", label: "Medium Priority" },
+                    { value: "Low", label: "Low Priority" },
+                  ] as SelectOption[]}
                   value={priorityFilter}
-                  onChange={(e) => setPriorityFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-slate-400"
-                >
-                  <option value="ALL">All Priorities</option>
-                  <option value="High">High Priority</option>
-                  <option value="Medium">Medium Priority</option>
-                  <option value="Low">Low Priority</option>
-                </select>
+                  onChange={(val: string) => setPriorityFilter(val ?? "ALL")}
+                  isClearable={false}
+                  className="w-44"
+                />
 
                 {(query || priorityFilter !== "ALL") && (
                   <button
@@ -294,17 +298,24 @@ export default function ProjectsPage() {
                           {/* Interactive Status Movement & Actions */}
                           <div className="border-t border-slate-100 pt-2.5 flex items-center justify-between gap-1">
                             {/* Quick Status Mover */}
-                            <select
+                            <SearchableSelect
+                              placeholder="Move to..."
+                              options={[
+                                { value: "Planning", label: "Move: Planning" },
+                                { value: "In Progress", label: "Move: In Progress" },
+                                { value: "Review", label: "Move: Review" },
+                                { value: "Completed", label: "Move: Completed" },
+                              ] as SelectOption[]}
                               value={project.status}
-                              disabled={movingProjectId === project.id}
-                              onChange={(e) => handleStatusChange(project.id, e.target.value as ProjectColumn)}
-                              className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400"
-                            >
-                              <option value="Planning">Move: Planning</option>
-                              <option value="In Progress">Move: In Progress</option>
-                              <option value="Review">Move: Review</option>
-                              <option value="Completed">Move: Completed</option>
-                            </select>
+                              onChange={(val: string) => {
+                                if (val && val !== project.status) {
+                                  handleStatusChange(project.id, val as ProjectColumn);
+                                }
+                              }}
+                              isDisabled={movingProjectId === project.id}
+                              isClearable={false}
+                              className="w-36"
+                            />
 
                             {/* Card Menu Buttons */}
                             <div className="flex items-center gap-1">

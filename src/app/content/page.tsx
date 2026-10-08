@@ -10,6 +10,7 @@ import { ConfirmModal } from "@/components/confirm-modal";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
+import { SearchableSelect, SelectOption } from "@/components/searchable-select";
 
 export default function ContentPage() {
   const { toast } = useToast();
@@ -152,29 +153,31 @@ export default function ContentPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
-                <select
+                <SearchableSelect
+                  placeholder="All Platforms"
+                  options={[
+                    { value: "ALL", label: "All Platforms" },
+                    ...platforms.map((p) => ({ value: p, label: p } as SelectOption)),
+                  ]}
                   value={platformFilter}
-                  onChange={(e) => setPlatformFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  <option value="ALL">All Platforms</option>
-                  {platforms.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val: string) => setPlatformFilter(val ?? "ALL")}
+                  isClearable={false}
+                  className="w-44"
+                />
 
-                <select
+                <SearchableSelect
+                  placeholder="All Priorities"
+                  options={[
+                    { value: "ALL", label: "All Priorities" },
+                    { value: "High", label: "High" },
+                    { value: "Medium", label: "Medium" },
+                    { value: "Low", label: "Low" },
+                  ] as SelectOption[]}
                   value={priorityFilter}
-                  onChange={(e) => setPriorityFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  <option value="ALL">All Priorities</option>
-                  <option value="High">High</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Low">Low</option>
-                </select>
+                  onChange={(val: string) => setPriorityFilter(val ?? "ALL")}
+                  isClearable={false}
+                  className="w-40"
+                />
 
                 {hasActiveFilters && (
                   <button

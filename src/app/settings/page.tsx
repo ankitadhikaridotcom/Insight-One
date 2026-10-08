@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { ProtectedPage } from "@/components/protected-page";
 import { DataService, WorkspaceSettings } from "@/services/dataService";
 import { useToast } from "@/components/toast";
+import { SearchableSelect, SelectOption } from "@/components/searchable-select";
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -107,18 +108,20 @@ export default function SettingsPage() {
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-600">
                     Primary Industry
                   </label>
-                  <select
+                  <SearchableSelect
+                    placeholder="Select industry..."
+                    options={[
+                      { value: "Enterprise SaaS & Strategic Growth", label: "Enterprise SaaS & AI" },
+                      { value: "Management Consulting", label: "Management Consulting" },
+                      { value: "Media & Creative Production", label: "Media & Creative Production" },
+                      { value: "Financial Services & Fintech", label: "Financial Services & Fintech" },
+                      { value: "Healthcare & Biotechnology", label: "Healthcare & Biotechnology" },
+                      { value: "Logistics & Supply Chain", label: "Logistics & Supply Chain" },
+                    ] as SelectOption[]}
                     value={settings.industry || "Enterprise SaaS & Strategic Growth"}
-                    onChange={(e) => setSettings({ ...settings, industry: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-                  >
-                    <option value="Enterprise SaaS & Strategic Growth">Enterprise SaaS & AI</option>
-                    <option value="Management Consulting">Management Consulting</option>
-                    <option value="Media & Creative Production">Media & Creative Production</option>
-                    <option value="Financial Services & Fintech">Financial Services & Fintech</option>
-                    <option value="Healthcare & Biotechnology">Healthcare & Biotechnology</option>
-                    <option value="Logistics & Supply Chain">Logistics & Supply Chain</option>
-                  </select>
+                    onChange={(val: string) => setSettings({ ...settings, industry: val })}
+                    isClearable={false}
+                  />
                 </div>
 
                 <div>
@@ -156,22 +159,24 @@ export default function SettingsPage() {
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-600">
                   Primary Operating Timezone
                 </label>
-                <select
+                <SearchableSelect
+                  placeholder="Select timezone..."
+                  options={[
+                    { value: "America/New_York (UTC-5)", label: "Eastern Time – US & Canada (UTC-05:00)" },
+                    { value: "America/Chicago (UTC-6)", label: "Central Time – US & Canada (UTC-06:00)" },
+                    { value: "America/Denver (UTC-7)", label: "Mountain Time – US & Canada (UTC-07:00)" },
+                    { value: "America/Los_Angeles (UTC-8)", label: "Pacific Time – US & Canada (UTC-08:00)" },
+                    { value: "Europe/London (UTC+0)", label: "London, Edinburgh (UTC+00:00)" },
+                    { value: "Europe/Berlin (UTC+1)", label: "Berlin, Paris, Amsterdam (UTC+01:00)" },
+                    { value: "Asia/Dubai (UTC+4)", label: "Dubai, Abu Dhabi (UTC+04:00)" },
+                    { value: "Asia/Kolkata (UTC+5:30)", label: "India Standard Time (UTC+05:30)" },
+                    { value: "Asia/Singapore (UTC+8)", label: "Singapore, Hong Kong (UTC+08:00)" },
+                    { value: "Asia/Tokyo (UTC+9)", label: "Tokyo, Seoul (UTC+09:00)" },
+                  ] as SelectOption[]}
                   value={settings.timezone || "America/New_York (UTC-5)"}
-                  onChange={(e) => setSettings({ ...settings, timezone: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-                >
-                  <option value="America/New_York (UTC-5)">Eastern Time - US & Canada (UTC-05:00)</option>
-                  <option value="America/Chicago (UTC-6)">Central Time - US & Canada (UTC-06:00)</option>
-                  <option value="America/Denver (UTC-7)">Mountain Time - US & Canada (UTC-07:00)</option>
-                  <option value="America/Los_Angeles (UTC-8)">Pacific Time - US & Canada (UTC-08:00)</option>
-                  <option value="Europe/London (UTC+0)">London, Edinburgh (UTC+00:00)</option>
-                  <option value="Europe/Berlin (UTC+1)">Berlin, Paris, Amsterdam (UTC+01:00)</option>
-                  <option value="Asia/Dubai (UTC+4)">Dubai, Abu Dhabi (UTC+04:00)</option>
-                  <option value="Asia/Kolkata (UTC+5:30)">India Standard Time (UTC+05:30)</option>
-                  <option value="Asia/Singapore (UTC+8)">Singapore, Hong Kong (UTC+08:00)</option>
-                  <option value="Asia/Tokyo (UTC+9)">Tokyo, Seoul (UTC+09:00)</option>
-                </select>
+                  onChange={(val: string) => setSettings({ ...settings, timezone: val })}
+                  isClearable={false}
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -179,34 +184,38 @@ export default function SettingsPage() {
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-600">
                     Default Currency
                   </label>
-                  <select
+                  <SearchableSelect
+                    placeholder="Select currency..."
+                    options={[
+                      { value: "USD ($)", label: "USD ($)" },
+                      { value: "EUR (€)", label: "EUR (€)" },
+                      { value: "GBP (£)", label: "GBP (£)" },
+                      { value: "CAD ($)", label: "CAD ($)" },
+                      { value: "AUD ($)", label: "AUD ($)" },
+                      { value: "SGD ($)", label: "SGD ($)" },
+                      { value: "INR (₹)", label: "INR (₹)" },
+                    ] as SelectOption[]}
                     value={settings.currency || "USD ($)"}
-                    onChange={(e) => setSettings({ ...settings, currency: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-                  >
-                    <option value="USD ($)">USD ($)</option>
-                    <option value="EUR (€)">EUR (€)</option>
-                    <option value="GBP (£)">GBP (£)</option>
-                    <option value="CAD ($)">CAD ($)</option>
-                    <option value="AUD ($)">AUD ($)</option>
-                    <option value="SGD ($)">SGD ($)</option>
-                    <option value="INR (₹)">INR (₹)</option>
-                  </select>
+                    onChange={(val: string) => setSettings({ ...settings, currency: val })}
+                    isClearable={false}
+                  />
                 </div>
 
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-600">
                     Date Display Format
                   </label>
-                  <select
+                  <SearchableSelect
+                    placeholder="Select date format..."
+                    options={[
+                      { value: "YYYY-MM-DD", label: "YYYY-MM-DD (ISO)" },
+                      { value: "MM/DD/YYYY", label: "MM/DD/YYYY (US)" },
+                      { value: "DD/MM/YYYY", label: "DD/MM/YYYY (UK / EU)" },
+                    ] as SelectOption[]}
                     value={settings.dateFormat || "YYYY-MM-DD"}
-                    onChange={(e) => setSettings({ ...settings, dateFormat: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-                  >
-                    <option value="YYYY-MM-DD">YYYY-MM-DD (ISO)</option>
-                    <option value="MM/DD/YYYY">MM/DD/YYYY (US)</option>
-                    <option value="DD/MM/YYYY">DD/MM/YYYY (UK / EU)</option>
-                  </select>
+                    onChange={(val: string) => setSettings({ ...settings, dateFormat: val })}
+                    isClearable={false}
+                  />
                 </div>
               </div>
 
@@ -335,16 +344,18 @@ export default function SettingsPage() {
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-600">
                   Inactivity Session Expiry Policy
                 </label>
-                <select
+                <SearchableSelect
+                  placeholder="Select session timeout..."
+                  options={[
+                    { value: "1h", label: "1 Hour", subLabel: "High Security / Financial Compliance" },
+                    { value: "8h", label: "8 Hours", subLabel: "Standard Working Day Shift" },
+                    { value: "24h", label: "24 Hours", subLabel: "Recommended for Enterprise Teams" },
+                    { value: "7d", label: "7 Days", subLabel: "Extended Remember Session" },
+                  ] as SelectOption[]}
                   value={settings.sessionTimeout || "24h"}
-                  onChange={(e) => setSettings({ ...settings, sessionTimeout: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white"
-                >
-                  <option value="1h">1 Hour (High Security / Financial Compliance)</option>
-                  <option value="8h">8 Hours (Standard Working Day Shift)</option>
-                  <option value="24h">24 Hours (Recommended for Enterprise Teams)</option>
-                  <option value="7d">7 Days (Extended Remember Session)</option>
-                </select>
+                  onChange={(val: string) => setSettings({ ...settings, sessionTimeout: val })}
+                  isClearable={false}
+                />
               </div>
 
               <div className="space-y-3 pt-1">

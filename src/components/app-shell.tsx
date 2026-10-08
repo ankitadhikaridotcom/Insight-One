@@ -290,7 +290,7 @@ export function AppShell({
         onClose={() => setProfileModalOpen(false)}
         title="Your Profile"
         subtitle="Current user profile and organization details"
-        maxWidth="md"
+        maxWidth="2xl"
       >
         <div className="space-y-4">
           <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">

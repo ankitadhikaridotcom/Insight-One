@@ -5,6 +5,7 @@ import { Modal } from "./modal";
 import { ContentItem, ContentStage, CONTENT_STAGES, DataService } from "@/services/dataService";
 import { StatusBadge } from "./status-badge";
 import { useToast } from "./toast";
+import { SearchableSelect, SelectOption } from "./searchable-select";
 
 interface ContentDetailsModalProps {
   isOpen: boolean;
@@ -106,17 +107,14 @@ export function ContentDetailsModal({
             >
               ← Previous Stage
             </button>
-            <select
+            <SearchableSelect
+              placeholder="Move to stage..."
+              options={CONTENT_STAGES.map((s) => ({ value: s, label: s } as SelectOption))}
               value={content.status}
-              onChange={(e) => handleMoveStage(e.target.value as ContentStage)}
-              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-800"
-            >
-              {CONTENT_STAGES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+              onChange={(val: string) => { if (val) handleMoveStage(val as ContentStage); }}
+              isClearable={false}
+              className="w-40"
+            />
             <button
               type="button"
               disabled={currentStageIndex >= CONTENT_STAGES.length - 1}

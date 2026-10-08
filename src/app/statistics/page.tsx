@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { ProtectedPage } from "@/components/protected-page";
 import { DataService, CONTENT_STAGES } from "@/services/dataService";
 import { useToast } from "@/components/toast";
+import { SearchableSelect, SelectOption } from "@/components/searchable-select";
 
 export default function StatisticsPage() {
   const { toast } = useToast();
@@ -106,15 +107,18 @@ export default function StatisticsPage() {
         subtitle="Broad organizational metrics across delivery throughput, pipeline health, and client value."
         actions={
           <div className="flex items-center gap-2">
-            <select
+            <SearchableSelect
+              placeholder="Period"
+              options={[
+                { value: "ALL", label: "All Time" },
+                { value: "30D", label: "Last 30 Days" },
+                { value: "7D", label: "This Week" },
+              ] as SelectOption[]}
               value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none"
-            >
-              <option value="ALL">All Time</option>
-              <option value="30D">Last 30 Days</option>
-              <option value="7D">This Week</option>
-            </select>
+              onChange={(val: string) => setPeriod(val ?? "ALL")}
+              isClearable={false}
+              className="w-36"
+            />
             <button
               type="button"
               onClick={handleExport}

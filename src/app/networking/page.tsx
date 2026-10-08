@@ -10,6 +10,7 @@ import { ConfirmModal } from "@/components/confirm-modal";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
+import { SearchableSelect, SelectOption } from "@/components/searchable-select";
 
 export default function NetworkingPage() {
   const { toast } = useToast();
@@ -129,29 +130,35 @@ export default function NetworkingPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
-                <select
+                <SearchableSelect
+                  placeholder="All Types"
+                  options={[
+                    { value: "ALL", label: "All Types" },
+                    { value: "Coffee", label: "Coffee" },
+                    { value: "Call", label: "Call" },
+                    { value: "Conference", label: "Conference" },
+                    { value: "Partnership", label: "Partnership" },
+                    { value: "Meeting", label: "Meeting" },
+                  ] as SelectOption[]}
                   value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  <option value="ALL">All Types</option>
-                  <option value="Coffee">Coffee</option>
-                  <option value="Call">Call</option>
-                  <option value="Conference">Conference</option>
-                  <option value="Partnership">Partnership</option>
-                  <option value="Meeting">Meeting</option>
-                </select>
+                  onChange={(val: string) => setTypeFilter(val ?? "ALL")}
+                  isClearable={false}
+                  className="w-40"
+                />
 
-                <select
+                <SearchableSelect
+                  placeholder="All Statuses"
+                  options={[
+                    { value: "ALL", label: "All Statuses" },
+                    { value: "Planned", label: "Planned" },
+                    { value: "Connected", label: "Connected" },
+                    { value: "Follow-up", label: "Follow-up" },
+                  ] as SelectOption[]}
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  <option value="ALL">All Statuses</option>
-                  <option value="Planned">Planned</option>
-                  <option value="Connected">Connected</option>
-                  <option value="Follow-up">Follow-up</option>
-                </select>
+                  onChange={(val: string) => setStatusFilter(val ?? "ALL")}
+                  isClearable={false}
+                  className="w-40"
+                />
 
                 {hasActiveFilters && (
                   <button

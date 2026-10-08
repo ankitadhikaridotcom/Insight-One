@@ -11,6 +11,7 @@ import { ConfirmModal } from "@/components/confirm-modal";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
+import { SearchableSelect, SelectOption } from "@/components/searchable-select";
 
 export default function ClientsPage() {
   const { toast } = useToast();
@@ -134,29 +135,31 @@ export default function ClientsPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
-                <select
+                <SearchableSelect
+                  placeholder="All Statuses"
+                  options={[
+                    { value: "ALL", label: "All Statuses" },
+                    { value: "Active", label: "Active" },
+                    { value: "Prospect", label: "Prospect" },
+                    { value: "At Risk", label: "At Risk" },
+                  ] as SelectOption[]}
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  <option value="ALL">All Statuses</option>
-                  <option value="Active">Active</option>
-                  <option value="Prospect">Prospect</option>
-                  <option value="At Risk">At Risk</option>
-                </select>
+                  onChange={(val: string) => setStatusFilter(val ?? "ALL")}
+                  isClearable={false}
+                  className="w-40"
+                />
 
-                <select
+                <SearchableSelect
+                  placeholder="All Industries"
+                  options={[
+                    { value: "ALL", label: "All Industries" },
+                    ...industries.map((ind) => ({ value: ind, label: ind } as SelectOption)),
+                  ]}
                   value={industryFilter}
-                  onChange={(e) => setIndustryFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  <option value="ALL">All Industries</option>
-                  {industries.map((ind) => (
-                    <option key={ind} value={ind}>
-                      {ind}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val: string) => setIndustryFilter(val ?? "ALL")}
+                  isClearable={false}
+                  className="w-48"
+                />
 
                 {hasActiveFilters && (
                   <button

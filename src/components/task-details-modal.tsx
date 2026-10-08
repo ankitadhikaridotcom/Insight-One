@@ -40,7 +40,7 @@ export function TaskDetailsModal({
       onClose={onClose}
       title={task.title}
       subtitle={`Client: ${task.client}`}
-      maxWidth="md"
+      maxWidth="2xl"
     >
       <div className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">

@@ -37,7 +37,7 @@ export function EmployeeDetailsModal({
   if (!employee) return null;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={employee.name} subtitle={employee.role} maxWidth="md">
+    <Modal isOpen={isOpen} onClose={onClose} title={employee.name} subtitle={employee.role} maxWidth="2xl">
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

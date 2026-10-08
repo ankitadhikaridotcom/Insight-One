@@ -28,7 +28,7 @@ export function EngagementDetailsModal({
       onClose={onClose}
       title={entry.client}
       subtitle={`${entry.platform} • ${entry.date}`}
-      maxWidth="md"
+      maxWidth="2xl"
     >
       <div className="space-y-5">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">

@@ -10,6 +10,7 @@ import { ConfirmModal } from "@/components/confirm-modal";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
+import { SearchableSelect, SelectOption } from "@/components/searchable-select";
 
 export default function TeamPage() {
   const { toast } = useToast();
@@ -134,29 +135,31 @@ export default function TeamPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
-                <select
+                <SearchableSelect
+                  placeholder="All Departments"
+                  options={[
+                    { value: "ALL", label: "All Departments" },
+                    ...departments.map((dept) => ({ value: dept, label: dept } as SelectOption)),
+                  ]}
                   value={departmentFilter}
-                  onChange={(e) => setDepartmentFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  <option value="ALL">All Departments</option>
-                  {departments.map((dept) => (
-                    <option key={dept} value={dept}>
-                      {dept}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val: string) => setDepartmentFilter(val ?? "ALL")}
+                  isClearable={false}
+                  className="w-48"
+                />
 
-                <select
+                <SearchableSelect
+                  placeholder="All Statuses"
+                  options={[
+                    { value: "ALL", label: "All Statuses" },
+                    { value: "Active", label: "Active" },
+                    { value: "Away", label: "Away" },
+                    { value: "On Leave", label: "On Leave" },
+                  ] as SelectOption[]}
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  <option value="ALL">All Statuses</option>
-                  <option value="Active">Active</option>
-                  <option value="Away">Away</option>
-                  <option value="On Leave">On Leave</option>
-                </select>
+                  onChange={(val: string) => setStatusFilter(val ?? "ALL")}
+                  isClearable={false}
+                  className="w-40"
+                />
 
                 {hasActiveFilters && (
                   <button

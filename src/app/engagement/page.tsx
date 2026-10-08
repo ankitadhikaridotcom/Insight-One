@@ -10,6 +10,7 @@ import { ConfirmModal } from "@/components/confirm-modal";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
+import { SearchableSelect, SelectOption } from "@/components/searchable-select";
 
 export default function EngagementPage() {
   const { toast } = useToast();
@@ -167,18 +168,17 @@ export default function EngagementPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
-                <select
+                <SearchableSelect
+                  placeholder="All Platforms"
+                  options={[
+                    { value: "ALL", label: "All Platforms" },
+                    ...platforms.map((p) => ({ value: p, label: p } as SelectOption)),
+                  ]}
                   value={platformFilter}
-                  onChange={(e) => setPlatformFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  <option value="ALL">All Platforms</option>
-                  {platforms.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val: string) => setPlatformFilter(val ?? "ALL")}
+                  isClearable={false}
+                  className="w-44"
+                />
 
                 {hasActiveFilters && (
                   <button

@@ -10,6 +10,7 @@ import { TaskModal } from "@/components/task-modal";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { StatusBadge } from "@/components/status-badge";
 import { useToast } from "@/components/toast";
+import { SearchableSelect, SelectOption } from "@/components/searchable-select";
 
 export default function CalendarPage() {
   const { toast } = useToast();
@@ -252,17 +253,20 @@ export default function CalendarPage() {
                   className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-slate-400"
                 />
 
-                <select
+                <SearchableSelect
+                  placeholder="All Event Types"
+                  options={[
+                    { value: "ALL", label: "All Event Types" },
+                    { value: "Meeting", label: "Meeting" },
+                    { value: "Content Deadline", label: "Content Deadline" },
+                    { value: "Task", label: "Task" },
+                    { value: "Launch", label: "Launch" },
+                  ] as SelectOption[]}
                   value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  <option value="ALL">All Event Types</option>
-                  <option value="Meeting">Meeting</option>
-                  <option value="Content Deadline">Content Deadline</option>
-                  <option value="Task">Task</option>
-                  <option value="Launch">Launch</option>
-                </select>
+                  onChange={(val: string) => setTypeFilter(val ?? "ALL")}
+                  isClearable={false}
+                  className="w-44"
+                />
 
                 {(query || typeFilter !== "ALL") && (
                   <button

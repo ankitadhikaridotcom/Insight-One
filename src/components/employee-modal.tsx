@@ -30,6 +30,14 @@ const STATUS_OPTIONS: SelectOption[] = [
   { value: "On Leave", label: "On Leave", subLabel: "Official leave of absence" },
 ];
 
+const SYSTEM_ROLE_OPTIONS: SelectOption[] = [
+  { value: "Tenant Admin", label: "Tenant Admin", subLabel: "Full workspace administration" },
+  { value: "content creator", label: "Content Creator", subLabel: "Produces content, drafts & tasks" },
+  { value: "content approver", label: "Content Approver", subLabel: "Reviews deliverables & publishing sign-offs" },
+  { value: "Viewer", label: "Viewer", subLabel: "Read-only access to analytics & reports" },
+  { value: "Role Host", label: "Role Host", subLabel: "Global platform super admin" },
+];
+
 export function EmployeeModal({
   isOpen,
   onClose,
@@ -236,19 +244,15 @@ export function EmployeeModal({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
-              Role / Title <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              placeholder="e.g. Account Strategist / Admin"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-500 focus:bg-white transition"
-            />
-            {errors.role && <p className="mt-1 text-xs text-rose-500">{errors.role}</p>}
-          </div>
+          <SearchableSelect
+            label="Role & Access Tier"
+            placeholder="Select platform role..."
+            options={SYSTEM_ROLE_OPTIONS}
+            value={role}
+            onChange={(val) => setRole(val || "content creator")}
+            required
+            error={errors.role}
+          />
 
           <SearchableSelect
             label="Department"
